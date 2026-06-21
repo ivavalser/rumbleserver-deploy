@@ -101,9 +101,13 @@ services:
 
 volumes:
   postgres_data:
+    name: rumbleserver_postgres_data
   redis_data:
+    name: rumbleserver_redis_data
   static_volume:
+    name: rumbleserver_static_volume
 
 networks:
   rumbleserver_network:
+    name: rumbleserver_network
     driver: bridge

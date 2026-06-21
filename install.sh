@@ -5,8 +5,10 @@ set -e
 # Скачивает только deploy-файлы из публичного rumbleserver-deploy.
 #
 # Использование:
+#   export RUMBLE_DIR=/opt/rumble
 #   curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/install.sh | bash
-#   RUMBLE_DIR=/opt/rumble curl -fsSL .../install.sh | bash
+#   # или одной строкой (VAR перед bash, не перед curl):
+#   curl -fsSL .../install.sh | RUMBLE_DIR=/opt/rumble bash
 
 INSTALL_DIR="${RUMBLE_DIR:-$HOME/rumbleserver}"
 DEPLOY_REPO="${RUMBLE_DEPLOY_REPO:-https://github.com/ivavalser/rumbleserver-deploy.git}"
@@ -36,7 +38,8 @@ if [ -d "$INSTALL_DIR/.git" ]; then
         echo "   Это часто бывает при миграции со старого деплоя (git clone rumbleserver)."
         echo "   Установи operator-bundle в другую папку, например:"
         echo ""
-        echo "   RUMBLE_DIR=/opt/rumble curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/install.sh | bash"
+        echo "   export RUMBLE_DIR=/opt/rumble"
+        echo "   curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/install.sh | bash"
         echo "   cp $INSTALL_DIR/.env /opt/rumble/.env"
         echo "   cd $INSTALL_DIR && docker compose --env-file .env -f deploy/docker-compose.yml down"
         echo "   cd /opt/rumble && ./prod.sh"

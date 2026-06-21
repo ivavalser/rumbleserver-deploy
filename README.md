@@ -20,7 +20,8 @@ curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/
 Другая директория:
 
 ```bash
-RUMBLE_DIR=/opt/rumble curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/install.sh | bash
+export RUMBLE_DIR=/opt/rumble
+curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/install.sh | bash
 ```
 
 ## Первый запуск
@@ -60,7 +61,8 @@ docker compose --env-file .env down    # volumes с БД сохраняются
 Поставь operator-bundle в отдельную папку:
 
 ```bash
-RUMBLE_DIR=/opt/rumble curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/install.sh | bash
+export RUMBLE_DIR=/opt/rumble
+curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/install.sh | bash
 cp ~/rumbleserver/.env /opt/rumble/.env
 cd ~/rumbleserver && docker compose --env-file .env -f deploy/docker-compose.yml down
 cd /opt/rumble && ./prod.sh
