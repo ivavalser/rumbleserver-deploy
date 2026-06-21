@@ -56,19 +56,14 @@ docker compose --env-file .env down    # volumes с БД сохраняются
 
 ## Миграция со старого деплоя (git pull + update.sh)
 
+На сервере уже есть `~/rumbleserver` с исходниками — **не перезаписывай его**.
+Поставь operator-bundle в отдельную папку:
+
 ```bash
-# 1. Установить operator bundle
-curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/install.sh | bash
-
-# 2. Перенести старый .env
-cp /path/to/old/rumbleserver/.env ~/rumbleserver/.env
-
-# 3. Остановить старые контейнеры (данные в volumes сохранятся)
-cd /path/to/old/rumbleserver
-docker compose --env-file .env -f deploy/docker-compose.yml down
-
-# 4. Запустить из образа
-cd ~/rumbleserver && ./prod.sh
+RUMBLE_DIR=/opt/rumble curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/install.sh | bash
+cp ~/rumbleserver/.env /opt/rumble/.env
+cd ~/rumbleserver && docker compose --env-file .env -f deploy/docker-compose.yml down
+cd /opt/rumble && ./prod.sh
 ```
 
-Старый clone с исходниками можно удалить после проверки.
+Старый clone с исходниками можно удалить после проверки: `rm -rf ~/rumbleserver`

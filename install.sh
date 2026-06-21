@@ -25,15 +25,37 @@ if ! command -v docker &> /dev/null; then
 fi
 
 if [ -d "$INSTALL_DIR/.git" ]; then
-    echo "🔄 Обновляю deploy-файлы в $INSTALL_DIR..."
-    git -C "$INSTALL_DIR" pull --ff-only
+    REMOTE="$(git -C "$INSTALL_DIR" remote get-url origin 2>/dev/null || true)"
+    if [[ "$REMOTE" == *"rumbleserver-deploy"* ]] && [ -f "$INSTALL_DIR/prod.sh" ]; then
+        echo "🔄 Обновляю deploy-файлы в $INSTALL_DIR..."
+        git -C "$INSTALL_DIR" pull --ff-only
+    else
+        echo "❌ $INSTALL_DIR уже занят другим репозиторием."
+        [ -n "$REMOTE" ] && echo "   origin: $REMOTE"
+        echo ""
+        echo "   Это часто бывает при миграции со старого деплоя (git clone rumbleserver)."
+        echo "   Установи operator-bundle в другую папку, например:"
+        echo ""
+        echo "   RUMBLE_DIR=/opt/rumble curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/install.sh | bash"
+        echo "   cp $INSTALL_DIR/.env /opt/rumble/.env"
+        echo "   cd $INSTALL_DIR && docker compose --env-file .env -f deploy/docker-compose.yml down"
+        echo "   cd /opt/rumble && ./prod.sh"
+        exit 1
+    fi
 else
     echo "⬇️  Скачиваю deploy-файлы в $INSTALL_DIR..."
     git clone --depth 1 "$DEPLOY_REPO" "$INSTALL_DIR"
 fi
 
 cd "$INSTALL_DIR"
-chmod +x prod.sh install.sh 2>/dev/null || chmod +x prod.sh
+
+if [ ! -f prod.sh ]; then
+    echo "❌ prod.sh не найден в $INSTALL_DIR — что-то пошло не так."
+    exit 1
+fi
+
+chmod +x prod.sh
+[ -f install.sh ] && chmod +x install.sh
 
 mkdir -p backups
 
