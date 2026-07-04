@@ -53,6 +53,30 @@ _open_browser() {
     return 1
 }
 
+# Remote install: SSH session or sudo from SSH (sudo often clears SSH_CONNECTION).
+_is_remote_session() {
+    [ -n "${SSH_CONNECTION:-}${SSH_CLIENT:-}${SUDO_USER:-}" ]
+}
+
+_print_installer_ready() {
+    local open_url="$1"
+    echo ""
+    echo "✅ Installer is running!"
+    echo ""
+    echo "Open: ${open_url}"
+    echo "INSTALLER_URL=${open_url}"
+    echo ""
+    echo "Log:  tail -f $INSTALL_DIR/installer.log"
+    echo "Stop: kill \$(cat $PID_FILE)"
+    if _is_remote_session; then
+        echo ""
+        echo "Remote server — open the URL above in your local browser."
+    elif _open_browser "$open_url"; then
+        echo ""
+        echo "Browser opened."
+    fi
+}
+
 if [ "$(id -u)" -ne 0 ]; then
     echo "❌ Run as root: curl ... | sudo bash"
     exit 1
@@ -63,12 +87,15 @@ echo "🚀 Rumble Server — web installer"
 if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
     OLD_TOKEN=""
     [ -f "$TOKEN_FILE" ] && OLD_TOKEN="$(cat "$TOKEN_FILE")"
-    SERVER_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
-    OPEN_URL="http://${SERVER_IP:-127.0.0.1}:${INSTALLER_PORT}/?token=${OLD_TOKEN}"
+    if [ -f "$URL_FILE" ]; then
+        OPEN_URL="$(cat "$URL_FILE")"
+    else
+        SERVER_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+        OPEN_URL="http://${SERVER_IP:-127.0.0.1}:${INSTALLER_PORT}/?token=${OLD_TOKEN}"
+    fi
     echo ""
     echo "⚠️  Installer is already running (PID $(cat "$PID_FILE"))."
-    echo "   $OPEN_URL"
-    _open_browser "$OPEN_URL" || true
+    _print_installer_ready "$OPEN_URL"
     exit 0
 fi
 
@@ -174,26 +201,4 @@ fi
 echo "$OPEN_URL" > "$URL_FILE"
 chmod 600 "$URL_FILE"
 
-echo ""
-echo "✅ Installer is running!"
-echo ""
-echo "   Local:    http://127.0.0.1:${INSTALLER_PORT}/?token=${TOKEN}"
-[ -n "$SERVER_IP" ] && echo "   Network:  http://${SERVER_IP}:${INSTALLER_PORT}/?token=${TOKEN}"
-[ -n "$PUBLIC_IP" ] && echo "   Public:   http://${PUBLIC_IP}:${INSTALLER_PORT}/?token=${TOKEN}"
-echo ""
-echo "   INSTALLER_URL=${OPEN_URL}"
-echo ""
-echo "   Log:      tail -f $INSTALL_DIR/installer.log"
-echo "   Stop:     kill \$(cat $PID_FILE)"
-
-if _open_browser "$OPEN_URL"; then
-    echo "   Browser:  opened ${OPEN_URL}"
-elif [ -n "${SSH_CONNECTION:-}" ]; then
-    echo "   Browser:  open this URL on your computer:"
-    echo "   ${OPEN_URL}"
-    # OSC 8 hyperlink (iTerm2, VS Code, Windows Terminal)
-    printf '   \033]8;;%s\033\\%s\033]8;;\033\\\n' "$OPEN_URL" "$OPEN_URL" 2>/dev/null || true
-else
-    echo "   Browser:  open ${OPEN_URL}"
-    printf '   \033]8;;%s\033\\%s\033]8;;\033\\\n' "$OPEN_URL" "$OPEN_URL" 2>/dev/null || true
-fi
+_print_installer_ready "$OPEN_URL"

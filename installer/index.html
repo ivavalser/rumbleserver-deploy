@@ -172,7 +172,7 @@
     let lang = localStorage.getItem('installer_lang') || 'en';
     const params = new URLSearchParams(location.search);
     const TOKEN = params.get('token') || '';
-    let state = null, currentStepId = null, logOffset = 0, busy = false;
+    let state = null, currentStepId = null, logOffset = 0, busy = false, lastFormStepId = null;
 
     function t(k) { return (UI[lang] && UI[lang][k]) || UI.en[k] || k; }
     function stepMeta(id) { return (STEPS_I18N[lang] && STEPS_I18N[lang][id]) || STEPS_I18N.en[id] || { title: id, desc: '' }; }
@@ -186,6 +186,7 @@
       document.getElementById('lang-ru').classList.toggle('active', l === 'ru');
       document.getElementById('hdr-title').textContent = t('title');
       document.getElementById('log-title').textContent = t('log');
+      lastFormStepId = null;
       if (state) { renderStepList(); renderCurrentStep(); }
     }
 
@@ -234,7 +235,7 @@
         const meta = stepMeta(step.id);
         const div = document.createElement('div');
         div.className = 'step-item' + (step.id === currentStepId ? ' active' : '') + (step.status === 'done' ? ' done' : '') + (step.status === 'error' ? ' error' : '');
-        div.onclick = () => { currentStepId = step.id; renderStepList(); renderCurrentStep(); };
+        div.onclick = () => { currentStepId = step.id; lastFormStepId = null; renderStepList(); renderCurrentStep(); };
         div.innerHTML = '<div class="step-dot">' + (step.status === 'done' ? '✓' : (idx + 1)) + '</div>' +
           '<div><div class="step-title">' + esc(meta.title) + '</div><div class="step-desc">' + esc(meta.desc) + '</div></div>';
         el.appendChild(div);
@@ -261,7 +262,10 @@
         manualEl.classList.remove('hidden');
         manualEl.textContent = (step.cwd ? '# cwd: ' + step.cwd + '\n\n' : '') + step.manual;
       } else manualEl.classList.add('hidden');
-      renderForm(step);
+      if (lastFormStepId !== step.id) {
+        renderForm(step);
+        lastFormStepId = step.id;
+      }
       renderActions(step);
     }
 
@@ -274,8 +278,8 @@
       if (step.id === 'ghcr') {
         formEl.classList.remove('hidden');
         formEl.innerHTML = `<div class="form-grid">
-          <label>${t('ghcrKey')}<input type="password" id="ghcr_key" placeholder="${t('ghcrKeyPh')}"></label>
-          <label>${t('ghcrUser')}<input type="text" id="ghcr_user" value="rmbldeploy"></label></div>`;
+          <label>${t('ghcrKey')}<input type="text" id="ghcr_key" autocomplete="off" placeholder="${t('ghcrKeyPh')}"></label>
+          <label>${t('ghcrUser')}<input type="text" id="ghcr_user" autocomplete="off" value="rmbldeploy"></label></div>`;
         return;
       }
       if (step.id === 'env') {
@@ -359,7 +363,7 @@
       if (step.status === 'done') {
         actions.appendChild(mkBtn(t('next'), 'secondary', () => {
           const idx = state.steps.findIndex(s => s.id === step.id);
-          if (idx < state.steps.length - 1) { currentStepId = state.steps[idx + 1].id; renderStepList(); renderCurrentStep(); }
+          if (idx < state.steps.length - 1) { currentStepId = state.steps[idx + 1].id; lastFormStepId = null; renderStepList(); renderCurrentStep(); }
         }));
       }
     }
