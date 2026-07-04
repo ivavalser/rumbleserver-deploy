@@ -374,6 +374,19 @@
       return b;
     }
 
+    function advanceToNextStep(action, data) {
+      if (!data.ok || currentStepId === 'finish') return;
+      const idx = state.steps.findIndex(s => s.id === currentStepId);
+      if (idx < 0 || idx >= state.steps.length - 1) return;
+      const step = state.steps[idx];
+      if (action === 'skip' || step.status === 'done') {
+        currentStepId = state.steps[idx + 1].id;
+        lastFormStepId = null;
+        renderStepList();
+        renderCurrentStep();
+      }
+    }
+
     async function runAction(action, dnsOnly = false, silent = false) {
       if (busy) return;
       busy = true; renderCurrentStep();
@@ -383,8 +396,10 @@
           return;
         }
         const res = await api('/api/step/' + currentStepId + '/' + action, { method: 'POST', body: JSON.stringify(collectPayload(currentStepId)) });
-        showActionResult(await res.json(), silent);
+        const data = await res.json();
+        showActionResult(data, silent);
         await refreshState();
+        advanceToNextStep(action, data);
       } catch (e) { if (!silent) alert(t('error') + ': ' + e.message); }
       finally { busy = false; renderCurrentStep(); }
     }
