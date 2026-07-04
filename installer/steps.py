@@ -170,6 +170,34 @@ def _get_public_ip() -> str | None:
         return None
 
 
+def get_server_public_ip(ctx: InstallerContext) -> str | None:
+    cached = ctx.get("public_ip")
+    if cached:
+        return cached
+    ip = _get_public_ip()
+    if ip:
+        ctx.set("public_ip", ip)
+    return ip
+
+
+def dns_setup_hint(domain: str, public_ip: str | None) -> dict[str, str]:
+    domain = domain.strip()
+    parts = [p for p in domain.split(".") if p]
+    if len(parts) >= 3:
+        name = parts[0]
+    elif len(parts) == 2:
+        name = "@"
+    else:
+        name = domain or "api"
+    return {
+        "type": "A",
+        "name": name,
+        "host": domain or "your-domain.com",
+        "value": public_ip or "",
+        "ttl": "300",
+    }
+
+
 def _resolve_domain(domain: str) -> list[str]:
     try:
         infos = socket.getaddrinfo(domain, None, type=socket.SOCK_STREAM)
@@ -590,6 +618,8 @@ def apply_env(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
         return _fail("AWS access key and secret are required.")
     if not merged.get("aws_storage_bucket_name"):
         return _fail("AWS bucket name is required.")
+    if not (merged.get("domain") or "").strip():
+        return _fail("Enter the server domain name.")
 
     if env_mode == "simple":
         merged.setdefault("db_pass", _generate_secret(24))
@@ -761,34 +791,49 @@ def check_nginx(ctx: InstallerContext) -> StepResult:
     return _ok(f"Nginx + HTTPS for {domain} are working.")
 
 
-def check_dns(ctx: InstallerContext) -> StepResult:
-    domain = (ctx.get("domain") or "").strip()
+def check_dns(ctx: InstallerContext, domain: str | None = None) -> StepResult:
+    domain = (domain or ctx.get("domain") or "").strip()
     if not domain:
-        return _fail("Domain not set.")
-    public_ip = _get_public_ip()
+        return _fail("Enter the server domain name first.")
+    public_ip = get_server_public_ip(ctx)
+    hint = dns_setup_hint(domain, public_ip)
     resolved = _resolve_domain(domain)
     if not resolved:
+        ip_hint = public_ip or "YOUR_SERVER_IP"
         return _fail(
-            f"DNS for {domain} does not resolve.",
+            f"DNS for {domain} does not resolve yet.",
             manual=(
-                f"Create an A record:\n  {domain} → {public_ip or 'SERVER_IP'}\n"
-                "Wait for DNS propagation, then click \"I've done it — verify\"."
+                f"At your domain registrar, create an A record:\n"
+                f"  Type:  A\n"
+                f"  Name:  {hint['name']}\n"
+                f"  Value: {ip_hint}\n"
+                f"  TTL:   {hint['ttl']}\n\n"
+                "DNS can take a few minutes to propagate. Then click Check DNS records."
             ),
             cwd="/",
             public_ip=public_ip,
             resolved=resolved,
+            dns_hint=hint,
         )
     if public_ip and public_ip not in resolved:
         return _fail(
-            f"DNS points to {resolved}, expected {public_ip}.",
+            f"{domain} points to {', '.join(resolved)}, but this server is {public_ip}.",
             manual=(
-                f"Fix A record {domain} → {public_ip}\n"
-                "Check: dig +short " + domain
+                f"Update the A record at your registrar:\n"
+                f"  Name:  {hint['name']}\n"
+                f"  Value: {public_ip}\n\n"
+                f"Check: dig +short {domain}"
             ),
             public_ip=public_ip,
             resolved=resolved,
+            dns_hint=hint,
         )
-    return _ok(f"DNS OK: {domain} → {', '.join(resolved)}", public_ip=public_ip)
+    return _ok(
+        f"DNS is configured: {domain} → {', '.join(resolved)}",
+        public_ip=public_ip,
+        resolved=resolved,
+        dns_hint=hint,
+    )
 
 
 def apply_nginx(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
@@ -902,7 +947,7 @@ STEPS: list[StepDef] = [
     StepDef(
         id="env",
         title="Server configuration (.env)",
-        description="Domain, database, Redis, AWS S3",
+        description="Domain, DNS, database, Redis, AWS S3",
         check=check_env,
         apply=apply_env,
         needs_form=True,

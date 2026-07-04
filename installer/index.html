@@ -63,6 +63,16 @@
     .status-item.fail { color: var(--err); }
     .aws-block { border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-top: 12px; }
     .aws-block h4 { margin: 0 0 10px; font-size: 0.95rem; }
+    .dns-block { border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-top: 12px; }
+    .dns-block h4 { margin: 0 0 8px; font-size: 0.95rem; }
+    .dns-block p { margin: 0 0 10px; color: var(--muted); font-size: 0.85rem; line-height: 1.45; }
+    .dns-table { width: 100%; font-size: 0.85rem; border-collapse: collapse; margin-bottom: 10px; }
+    .dns-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .dns-table td:first-child { color: var(--muted); width: 72px; white-space: nowrap; }
+    .dns-table code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; }
+    #env-dns-status { font-size: 0.85rem; margin-top: 4px; }
+    #env-dns-status.ok { color: var(--ok); }
+    #env-dns-status.fail { color: var(--err); }
     .link-row { margin: 10px 0; }
     .link-row a { color: var(--accent); }
   </style>
@@ -117,14 +127,26 @@
         ghcrKey: 'GHCR key',
         ghcrKeyPh: 'Key from maintainer',
         ghcrUser: 'GHCR user',
-        domain: 'Domain (FQDN)',
+        domain: 'Server domain',
+        domainRequired: 'Enter the server domain',
+        domainHelp: 'The server needs its own domain — clients connect via it and HTTPS is issued for it (e.g. api.example.com).',
+        domainDnsTitle: 'DNS setup',
+        domainDnsHint: 'At your domain registrar, create this A record pointing to this server:',
+        serverIp: 'This server IP',
+        serverIpUnknown: 'Could not detect automatically — check your VPS control panel',
+        dnsType: 'Type',
+        dnsName: 'Name',
+        dnsValue: 'Value',
+        dnsTtl: 'TTL',
+        checkDnsRecords: 'Check DNS records',
+        allowedHosts: 'ALLOWED_HOSTS',
+        allowedHostsHelp: 'Usually the same as the domain; filled in automatically',
         externalDb: 'External PostgreSQL',
         externalRedis: 'External Redis',
-        awsOptional: 'AWS S3 (optional)',
         strongPassword: 'Strong password',
-        domainLabel: 'Domain',
+        domainLabel: 'Server domain',
         certbotEmail: "Email for Let's Encrypt",
-        checkDns: 'Check DNS',
+        checkDns: 'Check DNS records',
         envSimple: 'Simple setup (recommended)',
         envSimpleDesc: 'Auto-generate PostgreSQL & Redis passwords for Docker',
         envAdvanced: 'Advanced setup',
@@ -138,7 +160,6 @@
         awsBucket: 'Bucket name',
         awsAccessKey: 'App access key ID',
         awsSecretKey: 'App secret access key',
-        allowedHosts: 'ALLOWED_HOSTS',
       },
       ru: {
         title: 'Rumble Server — установщик',
@@ -158,14 +179,20 @@
         ghcrKey: 'Ключ GHCR',
         ghcrKeyPh: 'Ключ от мейнтейнера',
         ghcrUser: 'Пользователь GHCR',
-        domain: 'Домен (FQDN)',
-        externalDb: 'Внешняя PostgreSQL',
-        externalRedis: 'Внешний Redis',
-        awsOptional: 'AWS S3 (опционально)',
-        strongPassword: 'Сильный пароль',
-        domainLabel: 'Домен',
-        certbotEmail: 'Email для Let\'s Encrypt',
-        checkDns: 'Проверить DNS',
+        domain: 'Домен сервера',
+        domainRequired: 'Введи домен сервера',
+        domainHelp: 'Для работы сервера нужен домен — по нему клиенты подключаются, на него выдаётся HTTPS (например, api.example.com).',
+        domainDnsTitle: 'Настройка DNS',
+        domainDnsHint: 'У регистратора домена создай A-запись на IP этого сервера:',
+        serverIp: 'IP этого сервера',
+        serverIpUnknown: 'Не удалось определить автоматически — смотри панель VPS',
+        dnsType: 'Тип',
+        dnsName: 'Имя',
+        dnsValue: 'Значение',
+        dnsTtl: 'TTL',
+        checkDnsRecords: 'Проверить DNS-записи',
+        allowedHosts: 'ALLOWED_HOSTS',
+        allowedHostsHelp: 'Обычно совпадает с доменом; заполняется автоматически',
         envSimple: 'Простая установка (рекомендуется)',
         envSimpleDesc: 'Автогенерация паролей PostgreSQL и Redis в Docker',
         envAdvanced: 'Продвинутая установка',
@@ -179,7 +206,12 @@
         awsBucket: 'Имя bucket',
         awsAccessKey: 'App access key ID',
         awsSecretKey: 'App secret access key',
-        allowedHosts: 'ALLOWED_HOSTS',
+        externalDb: 'Внешняя PostgreSQL',
+        externalRedis: 'Внешний Redis',
+        strongPassword: 'Сильный пароль',
+        domainLabel: 'Домен сервера',
+        certbotEmail: 'Email для Let\'s Encrypt',
+        checkDns: 'Проверить DNS-записи',
       },
     };
 
@@ -189,7 +221,7 @@
         ufw: { title: 'Firewall (UFW)', desc: 'Open ports 22, 80, 443', pending: 'Configure the firewall: allow SSH, HTTP, and HTTPS.' },
         docker: { title: 'Docker', desc: 'Engine and Compose plugin', pending: 'Install Docker Engine and the Compose plugin.' },
         ghcr: { title: 'Container registry (GHCR)', desc: 'Access key from maintainer', pending: 'Log in to GHCR with the access key from the maintainer.' },
-        env: { title: 'Server configuration (.env)', desc: 'Domain, database, Redis, AWS S3', pending: 'Fill in the form below to create and configure the server .env file.' },
+        env: { title: 'Server configuration (.env)', desc: 'Domain, database, Redis, AWS S3', pending: 'Specify the server domain, set up DNS (see below), then fill in AWS credentials.' },
         deploy: { title: 'Deploy application', desc: 'Pull images and start services', pending: 'Pull the container image and start the application.' },
         superuser: { title: 'Django Admin account', desc: 'First superuser', pending: 'Create the first Django Admin superuser account.' },
         nginx: { title: 'Nginx and HTTPS', desc: 'Reverse proxy and Let\'s Encrypt', pending: 'Set up Nginx, obtain an HTTPS certificate, and connect your domain.' },
@@ -200,7 +232,7 @@
         ufw: { title: 'Firewall (UFW)', desc: 'Порты 22, 80, 443', pending: 'Настроим firewall: откроем SSH, HTTP и HTTPS.' },
         docker: { title: 'Docker', desc: 'Engine и Compose plugin', pending: 'Установим Docker Engine и Compose plugin.' },
         ghcr: { title: 'Реестр образов (GHCR)', desc: 'Ключ от мейнтейнера', pending: 'Войдём в GHCR с ключом доступа от мейнтейнера.' },
-        env: { title: 'Создание и заполнение файла конфигурации сервера (.env)', desc: 'Домен, БД, Redis, AWS S3', pending: 'Заполни форму ниже — будет создан и настроен файл .env сервера.' },
+        env: { title: 'Создание и заполнение файла конфигурации сервера (.env)', desc: 'Домен, БД, Redis, AWS S3', pending: 'Укажи домен сервера, настрой DNS (инструкция ниже), затем заполни AWS.' },
         deploy: { title: 'Деплой приложения', desc: 'Образ и запуск сервисов', pending: 'Скачаем образ и запустим контейнеры приложения.' },
         superuser: { title: 'Аккаунт Django Admin', desc: 'Первый суперпользователь', pending: 'Создадим первого суперпользователя Django Admin.' },
         nginx: { title: 'Nginx и HTTPS', desc: 'Reverse proxy и Let\'s Encrypt', pending: 'Настроим Nginx, получим HTTPS-сертификат и привяжем домен.' },
@@ -218,6 +250,48 @@
     function pendingMessage(step) {
       const meta = stepMeta(step.id);
       return meta.pending || t('hint');
+    }
+    function dnsHintFor(domain) {
+      const d = (domain || '').trim();
+      const parts = d.split('.').filter(Boolean);
+      let name = 'api';
+      if (parts.length >= 3) name = parts[0];
+      else if (parts.length === 2) name = '@';
+      return {
+        type: 'A',
+        name,
+        host: d || 'your-domain.com',
+        value: state?.public_ip || '',
+        ttl: '300',
+      };
+    }
+    function renderEnvDnsHint(domain) {
+      const el = document.getElementById('env-dns-records');
+      if (!el) return;
+      const hint = dnsHintFor(domain);
+      const ip = hint.value || t('serverIpUnknown');
+      el.innerHTML = `
+        <p>${t('domainDnsHint')}</p>
+        <table class="dns-table">
+          <tr><td>${t('dnsType')}</td><td><code>${esc(hint.type)}</code></td></tr>
+          <tr><td>${t('dnsName')}</td><td><code>${esc(hint.name)}</code> <span style="color:var(--muted)">→ ${esc(hint.host)}</span></td></tr>
+          <tr><td>${t('dnsValue')}</td><td><code>${esc(ip)}</code> <span style="color:var(--muted)">(${t('serverIp')})</span></td></tr>
+          <tr><td>${t('dnsTtl')}</td><td><code>${esc(hint.ttl)}</code></td></tr>
+        </table>`;
+    }
+    function renderEnvDnsStatus(data) {
+      const el = document.getElementById('env-dns-status');
+      if (!el || !data) return;
+      el.className = data.ok ? 'ok' : 'fail';
+      el.textContent = data.message || '';
+    }
+    async function checkEnvDns() {
+      const domain = document.getElementById('domain')?.value?.trim() || '';
+      if (!domain) { alert(t('domainRequired')); return; }
+      try {
+        const data = await (await api('/api/step/env/dns-check?domain=' + encodeURIComponent(domain))).json();
+        renderEnvDnsStatus(data);
+      } catch (e) { alert(t('error') + ': ' + e.message); }
     }
     function esc(s) { return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -392,9 +466,18 @@
             <label><input type="radio" name="env_mode" value="advanced" ${mode === 'advanced' ? 'checked' : ''}> ${t('envAdvanced')}</label>
           </div>
           <p class="desc" id="env-mode-desc">${mode === 'advanced' ? t('envAdvancedDesc') : t('envSimpleDesc')}</p>
+          <p class="desc">${t('domainHelp')}</p>
           <div class="form-grid">
             <label>${t('domain')}<input type="text" id="domain" value="${esc(d.domain || state.domain || '')}" placeholder="api.example.com"></label>
-            <label>${t('allowedHosts')}<input type="text" id="allowed_hosts" value="${esc(d.allowed_hosts || '')}"></label>
+            <label>${t('allowedHosts')}<span style="display:block;font-size:.78rem;color:var(--muted);font-weight:400;margin-top:2px">${t('allowedHostsHelp')}</span><input type="text" id="allowed_hosts" value="${esc(d.allowed_hosts || '')}"></label>
+          </div>
+          <div class="dns-block" id="env-dns-block">
+            <h4>${t('domainDnsTitle')}</h4>
+            <div id="env-dns-records"></div>
+            <div class="actions" style="margin:0">
+              <button type="button" class="btn secondary" id="env-dns-check-btn">${t('checkDnsRecords')}</button>
+            </div>
+            <div id="env-dns-status"></div>
           </div>
           <div id="env-advanced-wrap" class="${mode === 'advanced' ? '' : 'hidden'}">${advancedBlock}</div>
           <div id="env-status-list" class="status-list"></div>
@@ -410,8 +493,10 @@
         formEl.querySelector('#aws-provision-btn').onclick = () => provisionAws();
         const domainInput = formEl.querySelector('#domain');
         const allowedInput = formEl.querySelector('#allowed_hosts');
+        renderEnvDnsHint(domainInput.value);
         domainInput.addEventListener('input', () => {
           if (!allowedInput.dataset.touched) allowedInput.value = domainInput.value;
+          renderEnvDnsHint(domainInput.value);
           const bucket = formEl.querySelector('#aws_storage_bucket_name');
           if (bucket && !bucket.dataset.touched) {
             const slug = domainInput.value.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase().slice(0, 40);
@@ -419,6 +504,7 @@
           }
         });
         allowedInput.addEventListener('input', () => { allowedInput.dataset.touched = '1'; });
+        formEl.querySelector('#env-dns-check-btn').onclick = () => checkEnvDns();
         formEl.querySelector('#aws_storage_bucket_name')?.addEventListener('input', e => { e.target.dataset.touched = '1'; });
         return;
       }
@@ -573,8 +659,13 @@
       if (busy) return;
       busy = true; renderCurrentStep();
       try {
-        if (dnsOnly && currentStepId === 'nginx') {
-          showActionResult(await (await api('/api/step/nginx/dns-check')).json(), silent);
+        if (dnsOnly && (currentStepId === 'nginx' || currentStepId === 'env')) {
+          const domain = currentStepId === 'env'
+            ? (document.getElementById('domain')?.value?.trim() || '')
+            : (state.domain || document.getElementById('nginx_domain')?.value?.trim() || '');
+          const data = await (await api('/api/step/' + currentStepId + '/dns-check?domain=' + encodeURIComponent(domain))).json();
+          if (currentStepId === 'env') renderEnvDnsStatus(data);
+          showActionResult(data, silent);
           return;
         }
         const res = await api('/api/step/' + currentStepId + '/' + action, { method: 'POST', body: JSON.stringify(collectPayload(currentStepId)) });
@@ -587,12 +678,14 @@
     }
 
     function showActionResult(data, silent) {
-      lastActionResult = { stepId: currentStepId, data, time: Date.now() };
-      if (data.ok) lastActionResult = null;
-      const statusEl = document.getElementById('step-status');
-      statusEl.classList.remove('hidden', 'ok', 'fail', 'info');
-      statusEl.textContent = data.message || (data.ok ? 'OK' : t('error'));
-      statusEl.classList.add(data.ok ? 'ok' : 'fail');
+      if (!silent) {
+        lastActionResult = { stepId: currentStepId, data, time: Date.now() };
+        if (data.ok) lastActionResult = null;
+        const statusEl = document.getElementById('step-status');
+        statusEl.classList.remove('hidden', 'ok', 'fail', 'info');
+        statusEl.textContent = data.message || (data.ok ? 'OK' : t('error'));
+        statusEl.classList.add(data.ok ? 'ok' : 'fail');
+      }
       if (data.data?.statuses) renderEnvStatuses(data.data.statuses);
       const manualEl = document.getElementById('step-manual');
       if (data.manual) {

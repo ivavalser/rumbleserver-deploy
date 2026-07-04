@@ -25,6 +25,8 @@ from steps import (  # noqa: E402
     StepResult,
     _default_env_payload,
     check_dns,
+    dns_setup_hint,
+    get_server_public_ip,
     step_statuses,
 )
 
@@ -123,6 +125,8 @@ class InstallerHandler(BaseHTTPRequestHandler):
                 statuses = step_statuses(self.ctx)
                 current = next((s for s in statuses if s["status"] != "done"), statuses[-1])
                 defaults = _default_env_payload(self.ctx)
+                public_ip = get_server_public_ip(self.ctx) or ""
+                domain = self.ctx.get("domain", "") or defaults.get("domain", "")
                 self._json_response(
                     HTTPStatus.OK,
                     {
@@ -130,7 +134,9 @@ class InstallerHandler(BaseHTTPRequestHandler):
                         "current_step": current["id"],
                         "install_dir": str(INSTALL_DIR),
                         "defaults": defaults,
-                        "domain": self.ctx.get("domain", ""),
+                        "domain": domain,
+                        "public_ip": public_ip,
+                        "dns_hint": dns_setup_hint(domain, public_ip or None),
                         "admin_username": self.ctx.get("admin_username", ""),
                     },
                 )
@@ -154,10 +160,12 @@ class InstallerHandler(BaseHTTPRequestHandler):
             if not self._require_auth():
                 return
             step_id = path.split("/")[3]
-            if step_id != "nginx":
+            if step_id not in ("nginx", "env"):
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "unsupported"})
                 return
-            result = check_dns(self.ctx)
+            qs = parse_qs(parsed.query)
+            domain = (qs.get("domain", [""])[0] or "").strip() or None
+            result = check_dns(self.ctx, domain=domain)
             self._json_response(
                 HTTPStatus.OK,
                 {
