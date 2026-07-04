@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Шаги веб-установщика Rumble Server."""
+"""Rumble Server web installer steps."""
 
 from __future__ import annotations
 
@@ -111,7 +111,7 @@ class InstallerContext:
                 self.log(line)
         if check and proc.returncode != 0:
             raise RuntimeError(
-                f"Команда завершилась с кодом {proc.returncode}: {display}"
+                f"Command failed with exit code {proc.returncode}: {display}"
             )
         return proc
 
@@ -204,23 +204,23 @@ def _generate_django_secret() -> str:
 def check_system(ctx: InstallerContext) -> StepResult:
     issues: list[str] = []
     if os.geteuid() != 0:
-        issues.append("Нужны права root (sudo).")
+        issues.append("Root privileges required (sudo).")
     os_info = _read_os_release()
     os_id = os_info.get("ID", "")
     if os_id not in ("ubuntu", "debian"):
-        issues.append(f"Ожидается Ubuntu/Debian, обнаружено: {os_id or 'unknown'}.")
+        issues.append(f"Expected Ubuntu/Debian, found: {os_id or 'unknown'}.")
     if not shutil.which("python3"):
-        issues.append("python3 не найден.")
+        issues.append("python3 not found.")
     if issues:
         return _fail(
             " ".join(issues),
             manual=(
-                "Запусти установщик от root на Ubuntu 22.04+ или Debian 11+:\n"
+                "Run the installer as root on Ubuntu 22.04+ or Debian 11+:\n"
                 "  curl -fsSL .../installer.sh | sudo bash"
             ),
         )
     return _ok(
-        f"Система: {os_info.get('PRETTY_NAME', os_id)}, python3 OK, root OK.",
+        f"System: {os_info.get('PRETTY_NAME', os_id)}, python3 OK, root OK.",
         os=os_info.get("PRETTY_NAME", os_id),
     )
 
@@ -235,22 +235,22 @@ def apply_system(ctx: InstallerContext, _payload: dict[str, Any]) -> StepResult:
 def check_ufw(ctx: InstallerContext) -> StepResult:
     if not shutil.which("ufw"):
         return _fail(
-            "ufw не установлен.",
+            "ufw is not installed.",
             manual="sudo apt-get install -y ufw",
             cwd="/",
         )
     status = ctx.run(["ufw", "status"], check=False)
     text = (status.stdout or "") + (status.stderr or "")
     if "Status: active" not in text:
-        return _fail("ufw не включён.", manual="sudo ufw enable")
+        return _fail("ufw is not enabled.", manual="sudo ufw enable")
     for port in ("22/tcp", "80/tcp", "443/tcp"):
         if port not in text:
             return _fail(
-                f"Порт {port} не открыт в ufw.",
+                f"Port {port} is not open in ufw.",
                 manual=f"sudo ufw allow {port}",
                 cwd="/",
             )
-    return _ok("ufw активен, порты 22/80/443 открыты.")
+    return _ok("ufw is active, ports 22/80/443 are open.")
 
 
 def apply_ufw(ctx: InstallerContext, _payload: dict[str, Any]) -> StepResult:
@@ -269,17 +269,17 @@ def apply_ufw(ctx: InstallerContext, _payload: dict[str, Any]) -> StepResult:
 def check_docker(ctx: InstallerContext) -> StepResult:
     if not shutil.which("docker"):
         return _fail(
-            "Docker не установлен.",
+            "Docker is not installed.",
             manual="curl -fsSL https://get.docker.com | sudo sh",
             cwd="/",
         )
     version = ctx.run(["docker", "--version"], check=False)
     if version.returncode != 0:
-        return _fail("docker не работает.", manual="sudo systemctl start docker")
+        return _fail("docker is not running.", manual="sudo systemctl start docker")
     compose = ctx.run(ctx.docker_compose_cmd() + ["version"], check=False)
     if compose.returncode != 0:
         return _fail(
-            "Docker Compose plugin не установлен.",
+            "Docker Compose plugin is not installed.",
             manual="sudo apt-get install -y docker-compose-plugin",
             cwd="/",
         )
@@ -297,13 +297,13 @@ def check_ghcr(ctx: InstallerContext) -> StepResult:
     registry = "ghcr.io"
     config_path = Path(os.environ.get("DOCKER_CONFIG", Path.home() / ".docker")) / "config.json"
     if config_path.exists() and registry in config_path.read_text(encoding="utf-8"):
-        return _ok("Вход в GHCR выполнен.")
+        return _ok("Logged in to GHCR.")
     if ctx.get("ghcr_key"):
-        return _fail("Ключ сохранён, но вход в GHCR не выполнен.")
+        return _fail("Key saved but GHCR login failed.")
     return _fail(
-        "Нет доступа к ghcr.io.",
+        "No access to ghcr.io.",
         manual=(
-            "Введи ключ доступа к образу в форме ниже или выполни:\n"
+            "Enter the image access key in the form below or run:\n"
             "  echo YOUR_KEY | docker login ghcr.io -u rmbldeploy --password-stdin"
         ),
         cwd=str(ctx.install_dir),
@@ -313,7 +313,7 @@ def check_ghcr(ctx: InstallerContext) -> StepResult:
 def apply_ghcr(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
     key = (payload.get("ghcr_key") or ctx.get("ghcr_key") or "").strip()
     if not key:
-        return _fail("Укажи ключ GHCR в форме.")
+        return _fail("Enter the GHCR key in the form.")
     user = payload.get("ghcr_user") or ctx.get("ghcr_user") or "rmbldeploy"
     ctx.update({"ghcr_key": key, "ghcr_user": user})
     ctx.run(
@@ -394,7 +394,7 @@ def _write_env_file(ctx: InstallerContext, payload: dict[str, Any]) -> None:
         "",
     ]
     ctx.env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    ctx.log(f"Записан {ctx.env_path}")
+    ctx.log(f"Wrote {ctx.env_path}")
 
     ctx.update(
         {
@@ -465,44 +465,44 @@ def _write_compose_override(
     content = "\n".join(lines) + "\n"
 
     ctx.override_file.write_text(content, encoding="utf-8")
-    ctx.log(f"Записан {ctx.override_file}")
+    ctx.log(f"Wrote {ctx.override_file}")
 
 
 def check_env(ctx: InstallerContext) -> StepResult:
     if not ctx.env_path.exists():
         return _fail(
-            ".env не создан.",
-            manual=f"Заполни форму или создай файл: {ctx.env_path}",
+            ".env file not found.",
+            manual=f"Fill in the form or create: {ctx.env_path}",
             cwd=str(ctx.install_dir),
         )
     text = ctx.env_path.read_text(encoding="utf-8")
     required = ["SECRET_KEY=", "DB_PASS=", "REDIS_PASSWORD=", "ALLOWED_HOSTS="]
     missing = [k for k in required if k not in text]
     if missing:
-        return _fail(f"В .env не хватает: {', '.join(missing)}")
+        return _fail(f".env is missing: {', '.join(missing)}")
     if "change_this" in text or "your-secret-key" in text:
-        return _fail("В .env остались значения-заглушки.")
-    return _ok(".env настроен.", defaults=_default_env_payload(ctx))
+        return _fail(".env still contains placeholder values.")
+    return _ok(".env is configured.", defaults=_default_env_payload(ctx))
 
 
 def apply_env(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
     merged = _default_env_payload(ctx)
     merged.update(payload)
     if merged.get("use_external_db") and not merged.get("db_host"):
-        return _fail("Укажи DB_HOST для внешней PostgreSQL.")
+        return _fail("Set DB_HOST for external PostgreSQL.")
     if merged.get("use_external_redis") and not merged.get("redis_host"):
-        return _fail("Укажи REDIS_HOST для внешнего Redis.")
+        return _fail("Set REDIS_HOST for external Redis.")
     _write_env_file(ctx, merged)
     return check_env(ctx)
 
 
 def check_deploy(ctx: InstallerContext) -> StepResult:
     if not ctx.env_path.exists():
-        return _fail("Сначала настрой .env.")
+        return _fail("Configure .env first.")
     ps = ctx.run(ctx.compose_base() + ["ps", "--format", "json"], check=False)
     if ps.returncode != 0:
         return _fail(
-            "Контейнеры не запущены.",
+            "Containers are not running.",
             manual=f"cd {ctx.install_dir} && {' '.join(ctx.compose_base())} up -d",
             cwd=str(ctx.install_dir),
         )
@@ -510,7 +510,7 @@ def check_deploy(ctx: InstallerContext) -> StepResult:
     for name in ("rumbleserver_web",):
         if name not in running:
             return _fail(
-                f"Контейнер {name} не запущен.",
+                f"Container {name} is not running.",
                 manual=f"cd {ctx.install_dir} && {' '.join(ctx.compose_base())} up -d",
                 cwd=str(ctx.install_dir),
             )
@@ -519,15 +519,15 @@ def check_deploy(ctx: InstallerContext) -> StepResult:
         check=False,
     )
     if check.returncode != 0:
-        return _fail("manage.py check не прошёл.", manual=check.stderr or check.stdout)
+        return _fail("manage.py check failed.", manual=check.stderr or check.stdout)
     curl = ctx.run(
         ["curl", "-fsS", "-o", "/dev/null", "-w", "%{http_code}", "http://127.0.0.1:8000/admin/"],
         check=False,
     )
     code = (curl.stdout or "").strip()
     if code not in ("200", "301", "302", "404"):
-        return _fail(f"Web не отвечает на :8000 (код {code or 'n/a'}).")
-    return _ok("Сервисы запущены, web отвечает.")
+        return _fail(f"Web is not responding on :8000 (code {code or 'n/a'}).")
+    return _ok("Services are running, web is responding.")
 
 
 def apply_deploy(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
@@ -550,7 +550,7 @@ def apply_deploy(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
 def check_superuser(ctx: InstallerContext) -> StepResult:
     username = ctx.get("admin_username")
     if not username:
-        return _fail("Суперпользователь не создан.", manual="Заполни форму ниже.")
+        return _fail("Superuser not created.", manual="Fill in the form below.")
     safe_user = username.replace("'", "\\'")
     proc = ctx.run(
         ctx.compose_base()
@@ -570,9 +570,9 @@ def check_superuser(ctx: InstallerContext) -> StepResult:
         check=False,
     )
     if proc.returncode == 0 and "True" in (proc.stdout or ""):
-        return _ok(f"Суперпользователь '{username}' существует.")
+        return _ok(f"Superuser '{username}' exists.")
     return _fail(
-        f"Суперпользователь '{username}' не найден.",
+        f"Superuser '{username}' not found.",
         manual=(
             f"cd {ctx.install_dir}\n"
             f"{' '.join(ctx.compose_base())} exec web python manage.py createsuperuser"
@@ -586,7 +586,7 @@ def apply_superuser(ctx: InstallerContext, payload: dict[str, Any]) -> StepResul
     email = (payload.get("admin_email") or "").strip()
     password = (payload.get("admin_password") or "").strip()
     if not username or not password:
-        return _fail("Укажи username и password.")
+        return _fail("Enter username and password.")
     ctx.update(
         {
             "admin_username": username,
@@ -623,44 +623,44 @@ def apply_superuser(ctx: InstallerContext, payload: dict[str, Any]) -> StepResul
 def check_nginx(ctx: InstallerContext) -> StepResult:
     domain = (ctx.get("domain") or "").strip()
     if not domain:
-        return _fail("Домен не указан. Вернись к шагу .env.")
+        return _fail("Domain not set. Go back to the .env step.")
     if not shutil.which("nginx"):
-        return _fail("nginx не установлен.", manual="sudo apt-get install -y nginx")
+        return _fail("nginx is not installed.", manual="sudo apt-get install -y nginx")
     conf = Path("/etc/nginx/sites-enabled/rumbleserver")
     if not conf.exists():
         return _fail(
-            "Конфиг nginx не найден.",
+            "nginx config not found.",
             manual="sudo nano /etc/nginx/sites-available/rumbleserver",
             cwd="/etc/nginx/sites-available",
         )
     test = ctx.run(["nginx", "-t"], check=False)
     if test.returncode != 0:
-        return _fail("nginx -t не прошёл.", manual=test.stderr or test.stdout)
+        return _fail("nginx -t failed.", manual=test.stderr or test.stdout)
     https = ctx.run(
         ["curl", "-fsSI", f"https://{domain}/api/"],
         check=False,
     )
     if https.returncode != 0:
         return _fail(
-            f"HTTPS для {domain} не отвечает.",
+            f"HTTPS for {domain} is not responding.",
             manual=f"sudo certbot --nginx -d {domain}",
             cwd="/",
         )
-    return _ok(f"Nginx + HTTPS для {domain} работают.")
+    return _ok(f"Nginx + HTTPS for {domain} are working.")
 
 
 def check_dns(ctx: InstallerContext) -> StepResult:
     domain = (ctx.get("domain") or "").strip()
     if not domain:
-        return _fail("Домен не указан.")
+        return _fail("Domain not set.")
     public_ip = _get_public_ip()
     resolved = _resolve_domain(domain)
     if not resolved:
         return _fail(
-            f"DNS для {domain} не резолвится.",
+            f"DNS for {domain} does not resolve.",
             manual=(
-                f"Создай A-запись:\n  {domain} → {public_ip or 'IP_СЕРВЕРА'}\n"
-                "Подожди распространения DNS и нажми «Я сделал — проверить»."
+                f"Create an A record:\n  {domain} → {public_ip or 'SERVER_IP'}\n"
+                "Wait for DNS propagation, then click \"I've done it — verify\"."
             ),
             cwd="/",
             public_ip=public_ip,
@@ -668,10 +668,10 @@ def check_dns(ctx: InstallerContext) -> StepResult:
         )
     if public_ip and public_ip not in resolved:
         return _fail(
-            f"DNS указывает на {resolved}, ожидается {public_ip}.",
+            f"DNS points to {resolved}, expected {public_ip}.",
             manual=(
-                f"Исправь A-запись {domain} → {public_ip}\n"
-                "Проверка: dig +short " + domain
+                f"Fix A record {domain} → {public_ip}\n"
+                "Check: dig +short " + domain
             ),
             public_ip=public_ip,
             resolved=resolved,
@@ -683,9 +683,9 @@ def apply_nginx(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
     domain = (ctx.get("domain") or payload.get("domain") or "").strip()
     email = (payload.get("certbot_email") or ctx.get("certbot_email") or "").strip()
     if not domain:
-        return _fail("Домен не указан.")
+        return _fail("Domain not set.")
     if not email:
-        return _fail("Укажи email для Let's Encrypt.")
+        return _fail("Enter email for Let's Encrypt.")
 
     dns = check_dns(ctx)
     if not dns.ok:
@@ -731,14 +731,14 @@ def check_finish(ctx: InstallerContext) -> StepResult:
     domain = ctx.get("domain") or "localhost"
     admin = ctx.get("admin_username") or "admin"
     summary_lines = [
-        "Rumble Server — установка завершена",
+        "Rumble Server — installation complete",
         "",
         f"Admin:     https://{domain}/admin/",
         f"Username:  {admin}",
         f".env:      {ctx.env_path}",
         f"Directory: {ctx.install_dir}",
         "",
-        "Полезные команды:",
+        "Useful commands:",
         f"  cd {ctx.install_dir}",
         f"  {' '.join(ctx.compose_base())} ps",
         f"  {' '.join(ctx.compose_base())} logs -f web",
@@ -756,19 +756,19 @@ def apply_finish(ctx: InstallerContext, _payload: dict[str, Any]) -> StepResult:
 STEPS: list[StepDef] = [
     StepDef(
         id="system",
-        title="Проверка системы",
+        title="System check",
         description="Ubuntu/Debian, root, python3",
         check=check_system,
         apply=apply_system,
-        skip_manual="Убедись, что сервер Ubuntu 22.04+ или Debian 11+, установлен python3, команды выполняются от root.",
+        skip_manual="Ensure Ubuntu 22.04+ or Debian 11+, python3 installed, commands run as root.",
     ),
     StepDef(
         id="ufw",
         title="Firewall (UFW)",
-        description="Порты 22, 80, 443",
+        description="Ports 22, 80, 443",
         check=check_ufw,
         apply=apply_ufw,
-        skip_manual="Настрой firewall вручную: открой 22/tcp, 80/tcp, 443/tcp.",
+        skip_manual="Configure firewall manually: allow 22/tcp, 80/tcp, 443/tcp.",
     ),
     StepDef(
         id="docker",
@@ -776,12 +776,12 @@ STEPS: list[StepDef] = [
         description="Docker Engine + Compose plugin",
         check=check_docker,
         apply=apply_docker,
-        skip_manual="Установи Docker: curl -fsSL https://get.docker.com | sudo sh && sudo apt-get install -y docker-compose-plugin",
+        skip_manual="Install Docker: curl -fsSL https://get.docker.com | sudo sh && sudo apt-get install -y docker-compose-plugin",
     ),
     StepDef(
         id="ghcr",
-        title="Доступ к образу (GHCR)",
-        description="Ключ от мейнтейнера",
+        title="Image access (GHCR)",
+        description="Key from maintainer",
         check=check_ghcr,
         apply=apply_ghcr,
         needs_form=True,
@@ -789,16 +789,16 @@ STEPS: list[StepDef] = [
     ),
     StepDef(
         id="env",
-        title="Конфигурация .env",
-        description="Домен, пароли, AWS",
+        title=".env configuration",
+        description="Domain, passwords, AWS",
         check=check_env,
         apply=apply_env,
         needs_form=True,
-        skip_manual=f"Создай .env из env.example и заполни ALLOWED_HOSTS, DB_PASS, REDIS_PASSWORD.",
+        skip_manual="Create .env from env.example and set ALLOWED_HOSTS, DB_PASS, REDIS_PASSWORD.",
     ),
     StepDef(
         id="deploy",
-        title="Деплой",
+        title="Deploy",
         description="docker compose pull && up -d",
         check=check_deploy,
         apply=apply_deploy,
@@ -807,7 +807,7 @@ STEPS: list[StepDef] = [
     StepDef(
         id="superuser",
         title="Django Admin",
-        description="Первый суперпользователь",
+        description="First superuser",
         check=check_superuser,
         apply=apply_superuser,
         needs_form=True,
@@ -816,16 +816,16 @@ STEPS: list[StepDef] = [
     StepDef(
         id="nginx",
         title="Nginx + HTTPS",
-        description="Reverse proxy и Let's Encrypt",
+        description="Reverse proxy and Let's Encrypt",
         check=check_nginx,
         apply=apply_nginx,
         needs_form=True,
-        skip_manual="Следуй разделу «Nginx и HTTPS» в DEPLOY.md",
+        skip_manual="Follow the Nginx and HTTPS section in DEPLOY.md",
     ),
     StepDef(
         id="finish",
-        title="Готово",
-        description="Сводка установки",
+        title="Done",
+        description="Installation summary",
         check=check_finish,
         apply=apply_finish,
     ),

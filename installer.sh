@@ -1,12 +1,12 @@
 #!/bin/bash
 set -e
 
-# Bootstrap веб-установщика Rumble Server (operator bundle).
+# Rumble Server web installer bootstrap (operator bundle).
 #
-# Использование:
+# Usage:
 #   curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/installer.sh | sudo bash
 #
-# Другая директория / ветка (sudo сбрасывает env — используй env):
+# Custom dir / branch (sudo resets env — use env):
 #   curl -fsSL .../installer.sh | sudo env RUMBLE_DEPLOY_BRANCH=feat/installer bash
 
 INSTALL_DIR="${RUMBLE_DIR:-$HOME/rumbleserver}"
@@ -15,11 +15,12 @@ DEPLOY_BRANCH="${RUMBLE_DEPLOY_BRANCH:-main}"
 INSTALLER_PORT="${INSTALLER_PORT:-8800}"
 PID_FILE="${INSTALL_DIR}/.installer.pid"
 TOKEN_FILE="${INSTALL_DIR}/.installer.token"
+URL_FILE="${INSTALL_DIR}/.installer-url"
 
 _clone_deploy_branch() {
     local branch="$1"
     rm -rf "$INSTALL_DIR"
-    echo "⬇️  Клонирую $DEPLOY_REPO → $INSTALL_DIR (ветка ${branch})..."
+    echo "⬇️  Cloning $DEPLOY_REPO → $INSTALL_DIR (branch ${branch})..."
     git clone --depth 1 --branch "$branch" "$DEPLOY_REPO" "$INSTALL_DIR"
 }
 
@@ -38,25 +39,41 @@ _ensure_deploy_files() {
     return 1
 }
 
+_open_browser() {
+    local url="$1"
+    if [ "${RUMBLE_OPEN_BROWSER:-1}" = "0" ]; then
+        return 0
+    fi
+    if command -v open &>/dev/null; then
+        open "$url" 2>/dev/null && return 0
+    fi
+    if [ -n "${DISPLAY:-}" ] && command -v xdg-open &>/dev/null; then
+        xdg-open "$url" 2>/dev/null && return 0
+    fi
+    return 1
+}
+
 if [ "$(id -u)" -ne 0 ]; then
-    echo "❌ Запусти от root: curl ... | sudo bash"
+    echo "❌ Run as root: curl ... | sudo bash"
     exit 1
 fi
 
-echo "🚀 Rumble Server — веб-установщик"
+echo "🚀 Rumble Server — web installer"
 
 if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
     OLD_TOKEN=""
     [ -f "$TOKEN_FILE" ] && OLD_TOKEN="$(cat "$TOKEN_FILE")"
     SERVER_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+    OPEN_URL="http://${SERVER_IP:-127.0.0.1}:${INSTALLER_PORT}/?token=${OLD_TOKEN}"
     echo ""
-    echo "⚠️  Установщик уже запущен (PID $(cat "$PID_FILE"))."
-    echo "   http://${SERVER_IP:-localhost}:${INSTALLER_PORT}/?token=${OLD_TOKEN}"
+    echo "⚠️  Installer is already running (PID $(cat "$PID_FILE"))."
+    echo "   $OPEN_URL"
+    _open_browser "$OPEN_URL" || true
     exit 0
 fi
 
 if ! command -v git &>/dev/null; then
-    echo "📦 Устанавливаю git..."
+    echo "📦 Installing git..."
     apt-get update -qq
     apt-get install -y git
 fi
@@ -64,30 +81,29 @@ fi
 if [ -d "$INSTALL_DIR/.git" ]; then
     REMOTE="$(git -C "$INSTALL_DIR" remote get-url origin 2>/dev/null || true)"
     if [[ "$REMOTE" == *"rumbleserver-deploy"* ]]; then
-        echo "🔄 Обновляю deploy-файлы в $INSTALL_DIR (ветка ${DEPLOY_BRANCH})..."
+        echo "🔄 Updating deploy files in $INSTALL_DIR (branch ${DEPLOY_BRANCH})..."
         git -C "$INSTALL_DIR" fetch origin "$DEPLOY_BRANCH" --depth 1 2>/dev/null || true
         git -C "$INSTALL_DIR" checkout "$DEPLOY_BRANCH" 2>/dev/null || true
         git -C "$INSTALL_DIR" pull --ff-only origin "$DEPLOY_BRANCH" 2>/dev/null || true
     elif [ -f "$INSTALL_DIR/installer/server.py" ]; then
-        echo "✅ Использую локальный bundle в $INSTALL_DIR"
+        echo "✅ Using local bundle at $INSTALL_DIR"
     else
-        echo "❌ $INSTALL_DIR занят другим репозиторием."
+        echo "❌ $INSTALL_DIR is occupied by another repository."
         echo "   export RUMBLE_DIR=/opt/rumble"
         exit 1
     fi
 elif [ -f "$(dirname "$0")/installer/server.py" ]; then
     INSTALL_DIR="$(cd "$(dirname "$0")" && pwd)"
-    echo "✅ Локальный режим: $INSTALL_DIR"
+    echo "✅ Local mode: $INSTALL_DIR"
 else
     _ensure_deploy_files || true
 fi
 
-# Обновление существующего clone или повторная попытка других веток
 if [ ! -f "$INSTALL_DIR/installer/server.py" ]; then
     if [ -d "$INSTALL_DIR/.git" ]; then
         REMOTE="$(git -C "$INSTALL_DIR" remote get-url origin 2>/dev/null || true)"
         if [[ "$REMOTE" == *"rumbleserver-deploy"* ]]; then
-            echo "🔄 Обновляю deploy-файлы (ветка ${DEPLOY_BRANCH})..."
+            echo "🔄 Updating deploy files (branch ${DEPLOY_BRANCH})..."
             git -C "$INSTALL_DIR" fetch origin "$DEPLOY_BRANCH" --depth 1 2>/dev/null || true
             git -C "$INSTALL_DIR" checkout "$DEPLOY_BRANCH" 2>/dev/null || true
             git -C "$INSTALL_DIR" pull --ff-only origin "$DEPLOY_BRANCH" 2>/dev/null || true
@@ -96,19 +112,19 @@ if [ ! -f "$INSTALL_DIR/installer/server.py" ]; then
 fi
 
 if [ ! -f "$INSTALL_DIR/installer/server.py" ]; then
-    echo "⚠️  installer/ не найден, пробую другие ветки..."
+    echo "⚠️  installer/ not found, trying other branches..."
     _ensure_deploy_files || true
 fi
 
 cd "$INSTALL_DIR" 2>/dev/null || true
 
 if [ ! -f "$INSTALL_DIR/installer/server.py" ]; then
-    echo "❌ installer/server.py не найден в $INSTALL_DIR"
+    echo "❌ installer/server.py not found in $INSTALL_DIR"
     echo ""
-    echo "   Попробуй явно указать ветку (sudo сбрасывает переменные окружения):"
+    echo "   Specify branch explicitly (sudo clears env vars):"
     echo "   curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/feat/installer/installer.sh | sudo env RUMBLE_DEPLOY_BRANCH=feat/installer bash"
     echo ""
-    echo "   Или вручную:"
+    echo "   Or manually:"
     echo "   rm -rf $INSTALL_DIR"
     echo "   git clone --depth 1 --branch feat/installer $DEPLOY_REPO $INSTALL_DIR"
     echo "   $INSTALL_DIR/installer.sh"
@@ -124,7 +140,7 @@ echo "$TOKEN" > "$TOKEN_FILE"
 chmod 600 "$TOKEN_FILE"
 
 if command -v ufw &>/dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
-    echo "🔓 Открываю порт ${INSTALLER_PORT} в ufw..."
+    echo "🔓 Opening port ${INSTALLER_PORT} in ufw..."
     ufw allow "${INSTALLER_PORT}/tcp" || true
 fi
 
@@ -132,13 +148,13 @@ export RUMBLE_INSTALL_DIR="$INSTALL_DIR"
 export RUMBLE_INSTALLER_TOKEN="$TOKEN"
 export RUMBLE_INSTALLER_PORT="$INSTALLER_PORT"
 
-echo "▶️  Запускаю веб-установщик на порту ${INSTALLER_PORT}..."
+echo "▶️  Starting web installer on port ${INSTALLER_PORT}..."
 nohup python3 "$INSTALL_DIR/installer/server.py" >> "$INSTALL_DIR/installer.log" 2>&1 &
 echo $! > "$PID_FILE"
 
 sleep 1
 if ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
-    echo "❌ Не удалось запустить установщик. Лог:"
+    echo "❌ Failed to start installer. Log:"
     tail -20 "$INSTALL_DIR/installer.log" 2>/dev/null || true
     exit 1
 fi
@@ -146,12 +162,38 @@ fi
 SERVER_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 PUBLIC_IP="$(curl -fsSL --max-time 5 https://api.ipify.org 2>/dev/null || true)"
 
+# Prefer public IP for browser URL when available
+if [ -n "$PUBLIC_IP" ]; then
+    OPEN_URL="http://${PUBLIC_IP}:${INSTALLER_PORT}/?token=${TOKEN}"
+elif [ -n "$SERVER_IP" ]; then
+    OPEN_URL="http://${SERVER_IP}:${INSTALLER_PORT}/?token=${TOKEN}"
+else
+    OPEN_URL="http://127.0.0.1:${INSTALLER_PORT}/?token=${TOKEN}"
+fi
+
+echo "$OPEN_URL" > "$URL_FILE"
+chmod 600 "$URL_FILE"
+
 echo ""
-echo "✅ Установщик запущен!"
+echo "✅ Installer is running!"
 echo ""
-echo "   Локально:  http://127.0.0.1:${INSTALLER_PORT}/?token=${TOKEN}"
-[ -n "$SERVER_IP" ] && echo "   В сети:    http://${SERVER_IP}:${INSTALLER_PORT}/?token=${TOKEN}"
-[ -n "$PUBLIC_IP" ] && echo "   Публично:  http://${PUBLIC_IP}:${INSTALLER_PORT}/?token=${TOKEN}"
+echo "   Local:    http://127.0.0.1:${INSTALLER_PORT}/?token=${TOKEN}"
+[ -n "$SERVER_IP" ] && echo "   Network:  http://${SERVER_IP}:${INSTALLER_PORT}/?token=${TOKEN}"
+[ -n "$PUBLIC_IP" ] && echo "   Public:   http://${PUBLIC_IP}:${INSTALLER_PORT}/?token=${TOKEN}"
 echo ""
-echo "   Лог: tail -f $INSTALL_DIR/installer.log"
-echo "   Остановить: kill \$(cat $PID_FILE)"
+echo "   INSTALLER_URL=${OPEN_URL}"
+echo ""
+echo "   Log:      tail -f $INSTALL_DIR/installer.log"
+echo "   Stop:     kill \$(cat $PID_FILE)"
+
+if _open_browser "$OPEN_URL"; then
+    echo "   Browser:  opened ${OPEN_URL}"
+elif [ -n "${SSH_CONNECTION:-}" ]; then
+    echo "   Browser:  open this URL on your computer:"
+    echo "   ${OPEN_URL}"
+    # OSC 8 hyperlink (iTerm2, VS Code, Windows Terminal)
+    printf '   \033]8;;%s\033\\%s\033]8;;\033\\\n' "$OPEN_URL" "$OPEN_URL" 2>/dev/null || true
+else
+    echo "   Browser:  open ${OPEN_URL}"
+    printf '   \033]8;;%s\033\\%s\033]8;;\033\\\n' "$OPEN_URL" "$OPEN_URL" 2>/dev/null || true
+fi

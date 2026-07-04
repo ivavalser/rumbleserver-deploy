@@ -47,7 +47,7 @@ class InstallerHandler(BaseHTTPRequestHandler):
     server_version = "RumbleInstaller/1.0"
 
     def log_message(self, fmt: str, *args) -> None:
-        append_log(f"[http] {self.address_string()} - {fmt % args}")
+        pass  # skip HTTP access noise in installer log
 
     @property
     def ctx(self) -> InstallerContext:
@@ -137,7 +137,7 @@ class InstallerHandler(BaseHTTPRequestHandler):
                 return
             offset = int(parse_qs(parsed.query).get("offset", ["0"])[0])
             with LOG_LOCK:
-                lines = list(LOG_BUFFER)
+                lines = [l for l in LOG_BUFFER if not l.startswith("[http]")]
             if offset < 0:
                 offset = 0
             self._json_response(
@@ -200,7 +200,7 @@ class InstallerHandler(BaseHTTPRequestHandler):
                     elif action == "skip":
                         result = StepResult(
                             ok=True,
-                            message="Пропущено вручную",
+                            message="Skipped manually",
                             manual=step.skip_manual,
                             cwd=str(INSTALL_DIR),
                         )
@@ -246,7 +246,7 @@ class InstallerHandler(BaseHTTPRequestHandler):
             except OSError:
                 pass
             SHUTDOWN.set()
-            self._json_response(HTTPStatus.OK, {"ok": True, "message": "Установщик останавливается."})
+            self._json_response(HTTPStatus.OK, {"ok": True, "message": "Installer is shutting down."})
             threading.Thread(target=self.server.shutdown, daemon=True).start()  # type: ignore[attr-defined]
             return
 
@@ -269,11 +269,11 @@ def shutil_which_ufw_active() -> bool:
 
 def main() -> None:
     if not TOKEN:
-        print("RUMBLE_INSTALLER_TOKEN не задан", file=sys.stderr)
+        print("RUMBLE_INSTALLER_TOKEN is not set", file=sys.stderr)
         sys.exit(1)
 
     ctx = InstallerContext(INSTALL_DIR, append_log)
-    append_log(f"Установщик запущен: {INSTALL_DIR}, порт {PORT}")
+    append_log(f"Installer started: {INSTALL_DIR}, port {PORT}")
 
     class Server(ThreadingHTTPServer):
         pass
@@ -283,7 +283,7 @@ def main() -> None:
     httpd = Server(("0.0.0.0", PORT), InstallerHandler)
 
     def handle_signal(signum: int, _frame) -> None:
-        append_log(f"Signal {signum}, останавливаюсь...")
+        append_log(f"Signal {signum}, shutting down...")
         SHUTDOWN.set()
         threading.Thread(target=httpd.shutdown, daemon=True).start()
 
@@ -298,7 +298,7 @@ def main() -> None:
                 PID_FILE.unlink()
             except OSError:
                 pass
-        append_log("Установщик остановлен.")
+        append_log("Installer stopped.")
 
 
 if __name__ == "__main__":
