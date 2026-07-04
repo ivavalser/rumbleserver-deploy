@@ -358,13 +358,6 @@
       ).join('');
     }
 
-      const domain = document.getElementById('domain')?.value?.trim() || '';
-      if (!domain) { alert(t('domainRequired')); return; }
-      try {
-        const data = await (await api('/api/step/env/dns-check?domain=' + encodeURIComponent(domain))).json();
-        renderEnvDnsStatus(data);
-      } catch (e) { alert(t('error') + ': ' + e.message); }
-    }
     function esc(s) { return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
     function setLang(l) {
