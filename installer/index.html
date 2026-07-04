@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rumble Server — установщик</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: #1a2332;
+      --surface2: #243044;
+      --border: #2d3a4f;
+      --text: #e7ecf3;
+      --muted: #8b9cb3;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --err: #ef4444;
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    header h1 { margin: 0 0 4px; font-size: 1.35rem; }
+    header p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+    .layout {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      min-height: calc(100vh - 76px);
+    }
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
+    }
+    .sidebar {
+      padding: 16px;
+      border-right: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .step-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: var(--radius);
+      margin-bottom: 6px;
+      cursor: pointer;
+      border: 1px solid transparent;
+    }
+    .step-item:hover { background: var(--surface2); }
+    .step-item.active { background: var(--surface2); border-color: var(--accent); }
+    .step-dot {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      background: var(--border);
+      color: var(--muted);
+    }
+    .step-item.done .step-dot { background: var(--ok); color: #052e16; }
+    .step-item.error .step-dot { background: var(--err); color: #fff; }
+    .step-item.active .step-dot { background: var(--accent); color: #fff; }
+    .step-meta { min-width: 0; }
+    .step-title { font-size: 0.92rem; font-weight: 600; }
+    .step-desc { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+    main { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+    .panel h2 { margin: 0 0 8px; font-size: 1.15rem; }
+    .panel p.desc { margin: 0 0 16px; color: var(--muted); font-size: 0.9rem; }
+    .status {
+      padding: 12px 14px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
+    .status.ok { background: rgba(34,197,94,.12); border: 1px solid rgba(34,197,94,.35); }
+    .status.fail { background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.35); }
+    .status.info { background: rgba(59,130,246,.12); border: 1px solid rgba(59,130,246,.35); }
+    .manual {
+      background: #111827;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.82rem;
+      white-space: pre-wrap;
+      margin-bottom: 16px;
+      color: #cbd5e1;
+    }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    button.primary { background: var(--accent); color: #fff; }
+    button.primary:hover { background: var(--accent-hover); }
+    button.secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    button.secondary:hover { background: var(--border); }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    label { display: flex; flex-direction: column; gap: 6px; font-size: 0.82rem; color: var(--muted); }
+    input, select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 0.9rem;
+    }
+    input:focus, select:focus { outline: 2px solid rgba(59,130,246,.45); border-color: var(--accent); }
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 8px 0 12px;
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+    .checkbox-row input { width: auto; }
+    .log-panel {
+      flex: 1;
+      min-height: 220px;
+      display: flex;
+      flex-direction: column;
+    }
+    .log-panel h3 { margin: 0 0 8px; font-size: 0.95rem; }
+    .log {
+      flex: 1;
+      background: #0b0f14;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.78rem;
+      overflow: auto;
+      white-space: pre-wrap;
+      color: #94a3b8;
+      max-height: 320px;
+    }
+    .hidden { display: none !important; }
+    .token-warning {
+      background: rgba(245,158,11,.12);
+      border: 1px solid rgba(245,158,11,.35);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Rumble Server — веб-установщик</h1>
+    <p id="install-dir">Загрузка...</p>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div id="step-list"></div>
+    </aside>
+
+    <main>
+      <section class="panel" id="step-panel">
+        <h2 id="step-title">Загрузка</h2>
+        <p class="desc" id="step-desc"></p>
+        <div id="step-status" class="status info hidden"></div>
+        <div id="step-manual" class="manual hidden"></div>
+        <div id="step-form" class="hidden"></div>
+        <div class="actions" id="step-actions"></div>
+      </section>
+
+      <section class="panel log-panel">
+        <h3>Лог</h3>
+        <div class="log" id="log"></div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const TOKEN = params.get('token') || '';
+    let state = null;
+    let currentStepId = null;
+    let logOffset = 0;
+    let busy = false;
+
+    function api(path, options = {}) {
+      const url = new URL(path, location.origin);
+      if (TOKEN) url.searchParams.set('token', TOKEN);
+      const headers = { ...(options.headers || {}) };
+      if (TOKEN) headers['Authorization'] = 'Bearer ' + TOKEN;
+      if (options.body && !headers['Content-Type']) {
+        headers['Content-Type'] = 'application/json';
+      }
+      return fetch(url, { ...options, headers });
+    }
+
+    async function refreshState() {
+      const res = await api('/api/state');
+      if (!res.ok) throw new Error('Не удалось загрузить состояние');
+      state = await res.json();
+      document.getElementById('install-dir').textContent =
+        'Директория: ' + state.install_dir;
+      if (!currentStepId) currentStepId = state.current_step;
+      renderStepList();
+      renderCurrentStep();
+    }
+
+    async function pollLog() {
+      try {
+        const res = await api('/api/log?offset=' + logOffset);
+        const data = await res.json();
+        if (data.lines && data.lines.length) {
+          const logEl = document.getElementById('log');
+          logEl.textContent += data.lines.join('\n') + '\n';
+          logEl.scrollTop = logEl.scrollHeight;
+          logOffset = data.total;
+        }
+      } catch (_) {}
+    }
+
+    function renderStepList() {
+      const el = document.getElementById('step-list');
+      el.innerHTML = '';
+      state.steps.forEach((step, idx) => {
+        const div = document.createElement('div');
+        div.className = 'step-item' +
+          (step.id === currentStepId ? ' active' : '') +
+          (step.status === 'done' ? ' done' : '') +
+          (step.status === 'error' ? ' error' : '');
+        div.onclick = () => { currentStepId = step.id; renderStepList(); renderCurrentStep(); };
+        div.innerHTML =
+          '<div class="step-dot">' + (step.status === 'done' ? '✓' : (idx + 1)) + '</div>' +
+          '<div class="step-meta"><div class="step-title">' + esc(step.title) + '</div>' +
+          '<div class="step-desc">' + esc(step.description) + '</div></div>';
+        el.appendChild(div);
+      });
+    }
+
+    function esc(s) {
+      return String(s || '').replace(/[&<>"']/g, c =>
+        ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    function renderCurrentStep() {
+      const step = state.steps.find(s => s.id === currentStepId);
+      if (!step) return;
+
+      document.getElementById('step-title').textContent = step.title;
+      document.getElementById('step-desc').textContent = step.description;
+
+      const statusEl = document.getElementById('step-status');
+      statusEl.classList.remove('hidden', 'ok', 'fail', 'info');
+      if (step.message) {
+        statusEl.textContent = step.message;
+        statusEl.classList.add(step.status === 'done' ? 'ok' : 'fail');
+      } else {
+        statusEl.textContent = 'Нажми «Выполнить автоматически» или проверь вручную.';
+        statusEl.classList.add('info');
+      }
+
+      const manualEl = document.getElementById('step-manual');
+      if (step.manual) {
+        manualEl.classList.remove('hidden');
+        const cwd = step.cwd ? ('# cwd: ' + step.cwd + '\n\n') : '';
+        manualEl.textContent = cwd + step.manual;
+      } else {
+        manualEl.classList.add('hidden');
+      }
+
+      renderForm(step);
+      renderActions(step);
+    }
+
+    function renderForm(step) {
+      const formEl = document.getElementById('step-form');
+      formEl.innerHTML = '';
+      formEl.classList.add('hidden');
+
+      const d = state.defaults || {};
+
+      if (step.id === 'ghcr') {
+        formEl.classList.remove('hidden');
+        formEl.innerHTML = `
+          <div class="form-grid">
+            <label>Ключ GHCR
+              <input type="password" id="ghcr_key" placeholder="Ключ от мейнтейнера">
+            </label>
+            <label>Пользователь GHCR
+              <input type="text" id="ghcr_user" value="rmbldeploy">
+            </label>
+          </div>`;
+        return;
+      }
+
+      if (step.id === 'env') {
+        formEl.classList.remove('hidden');
+        formEl.innerHTML = `
+          <div class="form-grid">
+            <label>Домен (FQDN)
+              <input type="text" id="domain" value="${esc(d.domain || state.domain || '')}" placeholder="api.example.com">
+            </label>
+            <label>ALLOWED_HOSTS
+              <input type="text" id="allowed_hosts" value="${esc(d.allowed_hosts || '')}">
+            </label>
+            <label>DB_PASS
+              <input type="text" id="db_pass" value="${esc(d.db_pass || '')}">
+            </label>
+            <label>REDIS_PASSWORD
+              <input type="text" id="redis_password" value="${esc(d.redis_password || '')}">
+            </label>
+            <label>SECRET_KEY
+              <input type="text" id="secret_key" value="${esc(d.secret_key || '')}">
+            </label>
+          </div>
+          <div class="checkbox-row">
+            <input type="checkbox" id="use_external_db" ${d.use_external_db ? 'checked' : ''}>
+            <label for="use_external_db" style="color:var(--text)">Внешняя PostgreSQL</label>
+          </div>
+          <div class="form-grid" id="external-db-fields">
+            <label>DB_HOST<input type="text" id="db_host" value="${esc(d.db_host || 'db')}"></label>
+            <label>DB_PORT<input type="text" id="db_port" value="${esc(d.db_port || '5432')}"></label>
+            <label>DB_NAME<input type="text" id="db_name" value="${esc(d.db_name || 'rumbleserver_db')}"></label>
+            <label>DB_USER<input type="text" id="db_user" value="${esc(d.db_user || 'rumbleserver_user')}"></label>
+          </div>
+          <div class="checkbox-row">
+            <input type="checkbox" id="use_external_redis" ${d.use_external_redis ? 'checked' : ''}>
+            <label for="use_external_redis" style="color:var(--text)">Внешний Redis</label>
+          </div>
+          <div class="form-grid" id="external-redis-fields">
+            <label>REDIS_HOST<input type="text" id="redis_host" value="${esc(d.redis_host || 'redis')}"></label>
+            <label>REDIS_PORT<input type="text" id="redis_port" value="${esc(d.redis_port || '6379')}"></label>
+          </div>
+          <details style="margin-top:8px;color:var(--muted);font-size:.85rem">
+            <summary>AWS S3 (опционально)</summary>
+            <div class="form-grid" style="margin-top:10px">
+              <label>AWS_ACCESS_KEY_ID<input type="text" id="aws_access_key_id" value="${esc(d.aws_access_key_id || '')}"></label>
+              <label>AWS_SECRET_ACCESS_KEY<input type="password" id="aws_secret_access_key" value="${esc(d.aws_secret_access_key || '')}"></label>
+              <label>AWS_STORAGE_BUCKET_NAME<input type="text" id="aws_storage_bucket_name" value="${esc(d.aws_storage_bucket_name || '')}"></label>
+              <label>AWS_S3_REGION_NAME<input type="text" id="aws_s3_region_name" value="${esc(d.aws_s3_region_name || 'eu-north-1')}"></label>
+            </div>
+          </details>`;
+
+        const domainInput = formEl.querySelector('#domain');
+        const allowedInput = formEl.querySelector('#allowed_hosts');
+        domainInput.addEventListener('input', () => {
+          if (!allowedInput.dataset.touched) allowedInput.value = domainInput.value;
+        });
+        allowedInput.addEventListener('input', () => { allowedInput.dataset.touched = '1'; });
+        return;
+      }
+
+      if (step.id === 'superuser') {
+        formEl.classList.remove('hidden');
+        formEl.innerHTML = `
+          <div class="form-grid">
+            <label>Username
+              <input type="text" id="admin_username" value="${esc(state.admin_username || 'admin')}">
+            </label>
+            <label>Email
+              <input type="email" id="admin_email" placeholder="admin@example.com">
+            </label>
+            <label>Password
+              <input type="password" id="admin_password" placeholder="Сильный пароль">
+            </label>
+          </div>`;
+        return;
+      }
+
+      if (step.id === 'nginx') {
+        formEl.classList.remove('hidden');
+        formEl.innerHTML = `
+          <div class="form-grid">
+            <label>Домен
+              <input type="text" id="nginx_domain" value="${esc(state.domain || d.domain || '')}" readonly>
+            </label>
+            <label>Email для Let's Encrypt
+              <input type="email" id="certbot_email" placeholder="you@example.com">
+            </label>
+          </div>
+          <div class="actions" style="margin:0">
+            <button class="secondary" type="button" id="dns-check-btn">Проверить DNS</button>
+          </div>`;
+        formEl.querySelector('#dns-check-btn').onclick = () => runAction('check', true, true);
+        return;
+      }
+
+      if (step.id === 'finish') {
+        formEl.classList.remove('hidden');
+        formEl.innerHTML = `<div class="manual">${esc(step.message || '')}</div>`;
+      }
+    }
+
+    function collectPayload(stepId) {
+      const g = id => document.getElementById(id);
+      if (stepId === 'ghcr') {
+        return { ghcr_key: g('ghcr_key')?.value || '', ghcr_user: g('ghcr_user')?.value || 'rmbldeploy' };
+      }
+      if (stepId === 'env') {
+        return {
+          domain: g('domain')?.value || '',
+          allowed_hosts: g('allowed_hosts')?.value || '',
+          db_pass: g('db_pass')?.value || '',
+          redis_password: g('redis_password')?.value || '',
+          secret_key: g('secret_key')?.value || '',
+          use_external_db: g('use_external_db')?.checked || false,
+          use_external_redis: g('use_external_redis')?.checked || false,
+          db_host: g('db_host')?.value || '',
+          db_port: g('db_port')?.value || '',
+          db_name: g('db_name')?.value || '',
+          db_user: g('db_user')?.value || '',
+          redis_host: g('redis_host')?.value || '',
+          redis_port: g('redis_port')?.value || '',
+          aws_access_key_id: g('aws_access_key_id')?.value || '',
+          aws_secret_access_key: g('aws_secret_access_key')?.value || '',
+          aws_storage_bucket_name: g('aws_storage_bucket_name')?.value || '',
+          aws_s3_region_name: g('aws_s3_region_name')?.value || '',
+        };
+      }
+      if (stepId === 'superuser') {
+        return {
+          admin_username: g('admin_username')?.value || '',
+          admin_email: g('admin_email')?.value || '',
+          admin_password: g('admin_password')?.value || '',
+        };
+      }
+      if (stepId === 'nginx') {
+        return { certbot_email: g('certbot_email')?.value || '', domain: g('nginx_domain')?.value || '' };
+      }
+      return {};
+    }
+
+    function renderActions(step) {
+      const actions = document.getElementById('step-actions');
+      actions.innerHTML = '';
+
+      if (step.id === 'finish') {
+        const btn = mkBtn('Завершить установку', 'primary', finishInstaller);
+        actions.appendChild(btn);
+        return;
+      }
+
+      actions.appendChild(mkBtn('Выполнить автоматически', 'primary', () => runAction('apply')));
+      actions.appendChild(mkBtn('Я сделал — проверить', 'secondary', () => runAction('check')));
+      actions.appendChild(mkBtn('Пропустить (сделаю сам)', 'secondary', () => runAction('skip')));
+
+      const next = state.steps.find(s => s.status !== 'done' && s.id !== step.id);
+      if (step.status === 'done') {
+        const nextBtn = mkBtn('Следующий шаг →', 'secondary', () => {
+          const idx = state.steps.findIndex(s => s.id === step.id);
+          if (idx < state.steps.length - 1) {
+            currentStepId = state.steps[idx + 1].id;
+            renderStepList();
+            renderCurrentStep();
+          }
+        });
+        actions.appendChild(nextBtn);
+      }
+    }
+
+    function mkBtn(text, cls, handler) {
+      const b = document.createElement('button');
+      b.textContent = text;
+      b.className = cls;
+      b.disabled = busy;
+      b.onclick = handler;
+      return b;
+    }
+
+    async function runAction(action, dnsOnly = false, silent = false) {
+      if (busy) return;
+      busy = true;
+      renderCurrentStep();
+      try {
+        if (dnsOnly && currentStepId === 'nginx') {
+          const res = await api('/api/step/nginx/dns-check');
+          const data = await res.json();
+          showActionResult(data, silent);
+          return;
+        }
+        const payload = collectPayload(currentStepId);
+        const res = await api('/api/step/' + currentStepId + '/' + action, {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        showActionResult(data, silent);
+        await refreshState();
+      } catch (e) {
+        if (!silent) alert('Ошибка: ' + e.message);
+      } finally {
+        busy = false;
+        renderCurrentStep();
+      }
+    }
+
+    function showActionResult(data, silent) {
+      const statusEl = document.getElementById('step-status');
+      statusEl.classList.remove('hidden', 'ok', 'fail', 'info');
+      statusEl.textContent = data.message || (data.ok ? 'OK' : 'Ошибка');
+      statusEl.classList.add(data.ok ? 'ok' : 'fail');
+      const manualEl = document.getElementById('step-manual');
+      if (data.manual) {
+        manualEl.classList.remove('hidden');
+        const cwd = data.cwd ? ('# cwd: ' + data.cwd + '\n\n') : '';
+        manualEl.textContent = cwd + data.manual;
+      }
+      if (!silent && !data.ok && data.manual) {
+        manualEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+
+    async function finishInstaller() {
+      if (!confirm('Завершить установщик? Порт 8800 будет закрыт.')) return;
+      await api('/api/finish', { method: 'POST', body: '{}' });
+      document.getElementById('step-status').textContent =
+        'Установщик останавливается. Можно закрыть эту вкладку.';
+      document.getElementById('step-status').classList.remove('hidden');
+    }
+
+    async function init() {
+      if (!TOKEN) {
+        document.body.innerHTML =
+          '<div style="padding:40px;color:#ef4444">Нужен token в URL: ?token=...</div>';
+        return;
+      }
+      try {
+        await refreshState();
+        setInterval(pollLog, 1500);
+        setInterval(refreshState, 5000);
+      } catch (e) {
+        document.getElementById('step-status').textContent = 'Ошибка: ' + e.message;
+        document.getElementById('step-status').classList.remove('hidden');
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

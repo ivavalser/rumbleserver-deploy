@@ -54,12 +54,13 @@ elif ! grep -q "$REGISTRY" "${DOCKER_CONFIG:-$HOME/.docker}/config.json" 2>/dev/
 fi
 
 COMPOSE="$DOCKER_COMPOSE --env-file .env -f docker-compose.yml"
+COMPOSE_PROFILES="${COMPOSE_PROFILES:-local-db,local-redis}"
 
 echo "⬇️  Подтягиваю образ (VERSION=${VERSION:-stable})..."
-VERSION="${VERSION:-stable}" $COMPOSE pull
+VERSION="${VERSION:-stable}" COMPOSE_PROFILES="$COMPOSE_PROFILES" $COMPOSE pull
 
 echo "▶️  Запускаю сервисы..."
-VERSION="${VERSION:-stable}" $COMPOSE up -d
+VERSION="${VERSION:-stable}" COMPOSE_PROFILES="$COMPOSE_PROFILES" $COMPOSE up -d
 
 echo ""
 echo "📊 Статус:"
