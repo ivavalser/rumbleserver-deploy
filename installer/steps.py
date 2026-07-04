@@ -298,12 +298,6 @@ def apply_system(ctx: InstallerContext, _payload: dict[str, Any]) -> StepResult:
     if not shutil.which("python3"):
         ctx.run(["apt-get", "update", "-qq"])
         ctx.run(["apt-get", "install", "-y", "python3", "curl", "wget", "ca-certificates"])
-    try:
-        from aws_setup import ensure_aws_cli
-
-        ensure_aws_cli(ctx.log)
-    except Exception as exc:
-        ctx.log(f"AWS CLI preinstall skipped: {exc}")
     return check_system(ctx)
 
 
@@ -366,6 +360,37 @@ def apply_docker(ctx: InstallerContext, _payload: dict[str, Any]) -> StepResult:
     ctx.run(["sh", "/tmp/get-docker.sh"])
     ctx.run(["apt-get", "install", "-y", "docker-compose-plugin"], check=False)
     return check_docker(ctx)
+
+
+def check_awscli(ctx: InstallerContext) -> StepResult:
+    from aws_setup import find_aws_cli
+
+    path = find_aws_cli()
+    if not path:
+        return _fail(
+            "AWS CLI is not installed yet.",
+            manual="Click «Run automatically» or: apt-get update && apt-get install -y awscli",
+            cwd="/",
+        )
+    version = ctx.run([path, "--version"], check=False)
+    if version.returncode != 0:
+        return _fail(
+            "AWS CLI is present but not working.",
+            manual=f"{path} --version",
+            cwd="/",
+        )
+    return _ok(version.stdout.strip() or f"AWS CLI: {path}")
+
+
+def apply_awscli(ctx: InstallerContext, _payload: dict[str, Any]) -> StepResult:
+    from aws_setup import ensure_aws_cli
+
+    try:
+        path = ensure_aws_cli(ctx.log)
+    except RuntimeError as exc:
+        return _fail(str(exc), cwd="/")
+    version = ctx.run([path, "--version"], check=False)
+    return _ok(version.stdout.strip() or f"AWS CLI installed: {path}")
 
 
 def check_ghcr(ctx: InstallerContext) -> StepResult:
@@ -1160,6 +1185,14 @@ STEPS: list[StepDef] = [
         apply=apply_env,
         needs_form=True,
         skip_manual="Create .env with ALLOWED_HOSTS, DB/Redis credentials, and domain.",
+    ),
+    StepDef(
+        id="awscli",
+        title="AWS CLI",
+        description="Command-line tool for S3 setup",
+        check=check_awscli,
+        apply=apply_awscli,
+        skip_manual="apt-get update && apt-get install -y awscli",
     ),
     StepDef(
         id="aws",

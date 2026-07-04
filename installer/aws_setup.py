@@ -85,6 +85,11 @@ def _install_aws_cli_v2(log: Callable[[str], None]) -> None:
     subprocess.run(["/tmp/aws/install", "--update"], check=True)
 
 
+def find_aws_cli() -> str | None:
+    """Return path to aws binary if already installed."""
+    return _locate_aws_bin()
+
+
 def ensure_aws_cli(log: Callable[[str], None]) -> str:
     """Return path to aws binary, installing awscli via apt/pip/AWS v2 if needed."""
     path = _locate_aws_bin()
