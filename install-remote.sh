@@ -7,6 +7,11 @@ set -e
 #   ./install-remote.sh root@167.233.165.200
 #   ./install-remote.sh root@167.233.165.200 feat/installer
 #
+# To run a fresh installer on VPS (stop old process, remove dir) — SSH first:
+#   kill $(cat /root/rumbleserver/.installer.pid) 2>/dev/null || true
+#   rm -rf /root/rumbleserver
+# then run this script again.
+#
 # Requires: ssh, curl on the remote host, open (macOS) or xdg-open (Linux desktop)
 
 VPS="${1:?Usage: $0 user@host [deploy-branch]}"

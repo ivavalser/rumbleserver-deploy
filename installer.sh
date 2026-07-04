@@ -8,6 +8,11 @@ set -e
 #
 # Custom dir / branch (sudo resets env — use env):
 #   curl -fsSL .../installer.sh | sudo env RUMBLE_DEPLOY_BRANCH=feat/installer bash
+#
+# Restart / update installer (on VPS):
+#   kill $(cat /root/rumbleserver/.installer.pid) 2>/dev/null || true
+#   rm -rf /root/rumbleserver
+#   curl -fsSL .../installer.sh | sudo env RUMBLE_DEPLOY_BRANCH=feat/installer bash
 
 INSTALL_DIR="${RUMBLE_DIR:-$HOME/rumbleserver}"
 DEPLOY_REPO="${RUMBLE_DEPLOY_REPO:-https://github.com/ivavalser/rumbleserver-deploy.git}"
@@ -95,6 +100,11 @@ if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
     fi
     echo ""
     echo "⚠️  Installer is already running (PID $(cat "$PID_FILE"))."
+    echo ""
+    echo "To restart with a new version:"
+    echo "  kill \$(cat $PID_FILE)"
+    echo "  rm -rf $INSTALL_DIR"
+    echo "  curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/feat/installer/installer.sh | sudo env RUMBLE_DEPLOY_BRANCH=feat/installer bash"
     _print_installer_ready "$OPEN_URL"
     exit 0
 fi
