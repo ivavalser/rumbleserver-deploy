@@ -6,7 +6,9 @@ import json
 import os
 import re
 import secrets
+import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Callable
@@ -23,14 +25,71 @@ def _sanitize_bucket_name(name: str) -> str:
     return name[:63]
 
 
+def ensure_aws_cli(log: Callable[[str], None]) -> str:
+    """Return path to aws binary, installing awscli via apt/pip if needed."""
+    path = shutil.which("aws")
+    if path:
+        return path
+
+    log("AWS CLI not found — installing awscli...")
+    subprocess.run(["apt-get", "update", "-qq"], check=True)
+    apt = subprocess.run(
+        ["apt-get", "install", "-y", "awscli"],
+        capture_output=True,
+        text=True,
+    )
+    if apt.stdout:
+        for line in apt.stdout.strip().split("\n"):
+            if line.strip():
+                log(line)
+    if apt.stderr:
+        for line in apt.stderr.strip().split("\n"):
+            if line.strip():
+                log(line)
+
+    path = shutil.which("aws")
+    if path:
+        log(f"AWS CLI installed: {path}")
+        return path
+
+    log("apt awscli missing — trying pip install awscli...")
+    subprocess.run(["apt-get", "install", "-y", "python3-pip"], check=False)
+    pip = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "awscli"],
+        capture_output=True,
+        text=True,
+    )
+    if pip.returncode != 0:
+        pip = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "awscli", "--break-system-packages"],
+            capture_output=True,
+            text=True,
+        )
+    if pip.stderr:
+        for line in pip.stderr.strip().split("\n"):
+            if line.strip():
+                log(line)
+
+    path = shutil.which("aws")
+    if not path:
+        raise RuntimeError(
+            "AWS CLI (aws) is not installed and automatic install failed. "
+            "On the server run: apt-get update && apt-get install -y awscli"
+        )
+    log(f"AWS CLI installed: {path}")
+    return path
+
+
 def _run_aws(
     args: list[str],
     *,
     env: dict[str, str],
     log: Callable[[str], None],
     check: bool = True,
+    aws_bin: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    cmd = ["aws", *args, "--output", "json"]
+    bin_path = aws_bin or ensure_aws_cli(log)
+    cmd = [bin_path, *args, "--output", "json"]
     log("$ aws " + " ".join(args))
     proc = subprocess.run(cmd, env=env, capture_output=True, text=True)
     if proc.stdout:
@@ -45,14 +104,6 @@ def _run_aws(
         detail = (proc.stderr or proc.stdout or "").strip()
         raise RuntimeError(f"aws {' '.join(args)} failed: {detail}")
     return proc
-
-
-def ensure_aws_cli(log: Callable[[str], None]) -> None:
-    if subprocess.run(["aws", "--version"], capture_output=True).returncode == 0:
-        return
-    log("Installing awscli...")
-    subprocess.run(["apt-get", "update", "-qq"], check=True)
-    subprocess.run(["apt-get", "install", "-y", "awscli"], check=True)
 
 
 def _iam_policy_document(bucket: str) -> dict[str, Any]:
@@ -99,7 +150,7 @@ def provision_s3(
     if len(bucket) < 3:
         raise ValueError("Bucket name must be at least 3 characters.")
 
-    ensure_aws_cli(log)
+    aws_bin = ensure_aws_cli(log)
 
     env = {
         **dict(os.environ),
@@ -108,7 +159,7 @@ def provision_s3(
         "AWS_DEFAULT_REGION": region,
     }
 
-    _run_aws(["sts", "get-caller-identity"], env=env, log=log)
+    _run_aws(["sts", "get-caller-identity"], env=env, log=log, aws_bin=aws_bin)
 
     create_args = ["s3api", "create-bucket", "--bucket", bucket, "--region", region]
     if region != "us-east-1":
@@ -116,7 +167,7 @@ def provision_s3(
             ["--create-bucket-configuration", f"LocationConstraint={region}"]
         )
     try:
-        _run_aws(create_args, env=env, log=log)
+        _run_aws(create_args, env=env, log=log, aws_bin=aws_bin)
         log(f"Bucket {bucket} created.")
     except RuntimeError as exc:
         msg = str(exc)
@@ -223,7 +274,7 @@ def verify_s3_access(
     if not bucket:
         raise ValueError("Bucket name is required.")
 
-    ensure_aws_cli(log)
+    aws_bin = ensure_aws_cli(log)
 
     env = {
         **dict(os.environ),
@@ -239,7 +290,7 @@ def verify_s3_access(
 
     try:
         identity = json.loads(
-            _run_aws(["sts", "get-caller-identity"], env=env, log=log).stdout
+            _run_aws(["sts", "get-caller-identity"], env=env, log=log, aws_bin=aws_bin).stdout
         )
         add(f"Credentials valid (account {identity.get('Account', '?')})", True)
     except RuntimeError as exc:
@@ -256,6 +307,7 @@ def verify_s3_access(
             ["s3api", "get-bucket-location", "--bucket", bucket],
             env=env,
             log=log,
+            aws_bin=aws_bin,
         )
         add("s3:GetBucketLocation", True)
     except RuntimeError:
@@ -272,6 +324,7 @@ def verify_s3_access(
             ["s3api", "list-objects-v2", "--bucket", bucket, "--max-items", "1"],
             env=env,
             log=log,
+            aws_bin=aws_bin,
         )
         add("s3:ListBucket", True)
     except RuntimeError:
@@ -302,6 +355,7 @@ def verify_s3_access(
             ],
             env=env,
             log=log,
+            aws_bin=aws_bin,
         )
         add("s3:PutObject", True)
 
@@ -317,6 +371,7 @@ def verify_s3_access(
             ],
             env=env,
             log=log,
+            aws_bin=aws_bin,
         )
         add("s3:GetObject", True)
 
@@ -324,6 +379,7 @@ def verify_s3_access(
             ["s3api", "delete-object", "--bucket", bucket, "--key", test_key],
             env=env,
             log=log,
+            aws_bin=aws_bin,
         )
         add("s3:DeleteObject", True)
     except RuntimeError as exc:
