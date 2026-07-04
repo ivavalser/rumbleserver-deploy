@@ -43,22 +43,41 @@
   "Version": "2012-10-17",
   "Statement": [
     {
+      "Sid": "CreateBuckets",
+      "Effect": "Allow",
+      "Action": ["s3:CreateBucket"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ConfigureBuckets",
       "Effect": "Allow",
       "Action": [
-        "s3:CreateBucket",
-        "s3:PutPublicAccessBlock",
-        "s3:HeadBucket",
-        "s3:ListBucket",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:GetBucketLocation",
+        "s3:ListBucket"
+      ],
+      "Resource": "arn:aws:s3:::*"
+    },
+    {
+      "Sid": "ManageAppUser",
+      "Effect": "Allow",
+      "Action": [
         "iam:CreatePolicy",
         "iam:CreateUser",
         "iam:AttachUserPolicy",
-        "iam:CreateAccessKey",
-        "sts:GetCallerIdentity"
+        "iam:CreateAccessKey"
       ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "Identity",
+      "Effect": "Allow",
+      "Action": "sts:GetCallerIdentity",
       "Resource": "*"
     }
   ]
 }</pre>
+  <p><small>IAM action for public access block is <code>s3:PutBucketPublicAccessBlock</code> (not <code>s3:PutPublicAccessBlock</code>). There is no <code>s3:HeadBucket</code> — bucket checks use <code>s3:ListBucket</code> / <code>s3:GetBucketLocation</code> on the bucket ARN.</small></p>
   <p><a href="https://console.aws.amazon.com/iam/home#/policies/create" target="_blank" rel="noopener">IAM → Policies → Create policy</a> → JSON → name <code>RumbleServerBootstrap</code> → attach to <code>rumbleserver-bootstrap</code>.</p>
 
   <h3>1.3 Create bootstrap access keys</h3>
@@ -93,9 +112,12 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "ListBucket",
+      "Sid": "BucketAccess",
       "Effect": "Allow",
-      "Action": ["s3:ListBucket"],
+      "Action": [
+        "s3:ListBucket",
+        "s3:GetBucketLocation"
+      ],
       "Resource": "arn:aws:s3:::YOUR_BUCKET_NAME"
     },
     {
@@ -112,6 +134,7 @@
     }
   ]
 }</pre>
+  <p>Bucket-level actions (<code>ListBucket</code>, <code>GetBucketLocation</code>) go on <code>arn:aws:s3:::bucket-name</code>. Object actions go on <code>arn:aws:s3:::bucket-name/*</code>. For several servers/buckets, add more ARNs to each <code>Resource</code> array (as in a shared app user policy).</p>
   <p>Name: <code>RumbleServerS3-YOUR_BUCKET_NAME</code> → Create policy.</p>
 
   <h2>5. Create IAM user for the app</h2>
@@ -129,7 +152,7 @@
     <li><strong>Bucket name</strong></li>
     <li><strong>App access key ID</strong> / <strong>App secret access key</strong> — from step 5 (or filled automatically after provisioning)</li>
   </ul>
-  <p>Click <strong>Check S3 access</strong> — the installer verifies ListBucket, PutObject, GetObject, and DeleteObject on your bucket.</p>
+  <p>Click <strong>Check S3 access</strong> — the installer verifies GetBucketLocation, ListBucket, PutObject, GetObject, and DeleteObject on your bucket.</p>
 
   <h2>7. Values written to .env</h2>
   <ul>

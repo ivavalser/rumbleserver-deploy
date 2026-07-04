@@ -56,14 +56,19 @@ def ensure_aws_cli(log: Callable[[str], None]) -> None:
 
 
 def _iam_policy_document(bucket: str) -> dict[str, Any]:
+    bucket_arn = f"arn:aws:s3:::{bucket}"
+    objects_arn = f"arn:aws:s3:::{bucket}/*"
     return {
         "Version": "2012-10-17",
         "Statement": [
             {
-                "Sid": "ListBucket",
+                "Sid": "BucketAccess",
                 "Effect": "Allow",
-                "Action": ["s3:ListBucket"],
-                "Resource": f"arn:aws:s3:::{bucket}",
+                "Action": [
+                    "s3:ListBucket",
+                    "s3:GetBucketLocation",
+                ],
+                "Resource": bucket_arn,
             },
             {
                 "Sid": "ObjectAccess",
@@ -75,7 +80,7 @@ def _iam_policy_document(bucket: str) -> dict[str, Any]:
                     "s3:AbortMultipartUpload",
                     "s3:ListMultipartUploadParts",
                 ],
-                "Resource": f"arn:aws:s3:::{bucket}/*",
+                "Resource": objects_arn,
             },
         ],
     }
@@ -247,15 +252,19 @@ def verify_s3_access(
         }
 
     try:
-        _run_aws(["s3api", "head-bucket", "--bucket", bucket], env=env, log=log)
-        add(f"Bucket '{bucket}' exists and is reachable", True)
+        _run_aws(
+            ["s3api", "get-bucket-location", "--bucket", bucket],
+            env=env,
+            log=log,
+        )
+        add("s3:GetBucketLocation", True)
     except RuntimeError:
-        add(f"Bucket '{bucket}' exists and is reachable", False)
+        add("s3:GetBucketLocation", False)
         return {
             "ok": False,
             "message": f"Cannot access bucket '{bucket}'.",
             "checks": checks,
-            "manual": "Check bucket name, region, and IAM policy.",
+            "manual": "Check bucket name, region, and IAM policy (ListBucket + GetBucketLocation on the bucket ARN).",
         }
 
     try:
