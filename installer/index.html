@@ -54,17 +54,26 @@
     .checkbox-row input { width: auto; }
     .log { flex: 1; background: #0b0f14; border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; overflow: auto; white-space: pre-wrap; color: #94a3b8; max-height: 320px; }
     .hidden { display: none !important; }
-    .mode-switch { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
-    .mode-switch label { flex-direction: row; align-items: center; gap: 8px; cursor: pointer; color: var(--text); font-size: 0.9rem; }
+    .mode-switch { display: flex; gap: 8px; margin-bottom: 0; flex-wrap: wrap; }
+    .mode-switch label { flex-direction: row; align-items: center; gap: 8px; cursor: pointer; color: var(--text); font-size: 0.9rem; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+    .mode-switch label:has(input:checked) { border-color: var(--accent); background: rgba(59,130,246,.1); }
     .mode-switch input { width: auto; }
+    .env-form { display: flex; flex-direction: column; gap: 14px; }
+    .env-section { background: rgba(36, 48, 68, 0.35); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+    .env-section-title { margin: 0 0 6px; font-size: 0.98rem; font-weight: 600; color: var(--text); }
+    .env-section-lead { margin: 0 0 14px; color: var(--muted); font-size: 0.85rem; line-height: 1.5; }
+    .env-inner { margin-top: 12px; padding: 12px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+    .env-inner-title { margin: 0 0 8px; font-size: 0.88rem; font-weight: 600; color: var(--text); }
+    select { background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 10px 12px; font-size: 0.9rem; }
+    select:focus { outline: 2px solid rgba(59,130,246,.45); border-color: var(--accent); }
     .status-list { margin: 12px 0 16px; }
     .status-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 0.9rem; }
     .status-item.ok { color: var(--ok); }
     .status-item.fail { color: var(--err); }
-    .aws-block { border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-top: 12px; }
-    .aws-block h4 { margin: 0 0 10px; font-size: 0.95rem; }
-    .dns-block { border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-top: 12px; }
-    .dns-block h4 { margin: 0 0 8px; font-size: 0.95rem; }
+    .aws-block { border: none; border-radius: 0; padding: 0; margin-top: 0; }
+    .aws-block h4 { display: none; }
+    .dns-block { border: none; border-radius: 0; padding: 0; margin-top: 0; }
+    .dns-block h4 { display: none; }
     .dns-block p { margin: 0 0 10px; color: var(--muted); font-size: 0.85rem; line-height: 1.45; }
     .dns-table { width: 100%; font-size: 0.85rem; border-collapse: collapse; margin-bottom: 10px; }
     .dns-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
@@ -129,9 +138,15 @@
         ghcrUser: 'GHCR user',
         domain: 'Server domain',
         domainRequired: 'Enter the server domain',
-        domainHelp: 'The server needs its own domain — clients connect via it and HTTPS is issued for it (e.g. api.example.com).',
-        domainDnsTitle: 'DNS setup',
-        domainDnsHint: 'At your domain registrar, create this A record pointing to this server:',
+        domainHelp: 'The server needs a domain for HTTPS and client connections. By default use your main domain (e.g. example.com) — create an A record on @. Use a subdomain only if the root domain already serves another site.',
+        domainPlaceholder: 'example.com',
+        domainDnsHintRoot: 'At your domain registrar, create an A record for the root domain:',
+        domainDnsHintSub: 'You entered a subdomain — create an A record for it:',
+        domainDnsTitle: 'DNS record',
+        envSectionMode: 'Setup mode',
+        envSectionDomain: 'Domain and DNS',
+        envSectionDatabase: 'Database and Redis',
+        envSectionAws: 'File storage (AWS S3)',
         serverIp: 'This server IP',
         serverIpUnknown: 'Could not detect automatically — check your VPS control panel',
         dnsType: 'Type',
@@ -181,9 +196,15 @@
         ghcrUser: 'Пользователь GHCR',
         domain: 'Домен сервера',
         domainRequired: 'Введи домен сервера',
-        domainHelp: 'Для работы сервера нужен домен — по нему клиенты подключаются, на него выдаётся HTTPS (например, api.example.com).',
-        domainDnsTitle: 'Настройка DNS',
-        domainDnsHint: 'У регистратора домена создай A-запись на IP этого сервера:',
+        domainHelp: 'Для работы сервера нужен домен — по нему клиенты подключаются и выдаётся HTTPS. По умолчанию укажи основной домен (например, example.com) и создай A-запись на @. Субдомен — только если на основном домене уже что-то работает.',
+        domainPlaceholder: 'example.com',
+        domainDnsHintRoot: 'У регистратора домена создай A-запись для основного домена:',
+        domainDnsHintSub: 'Указан субдомен — создай для него A-запись:',
+        domainDnsTitle: 'DNS-запись',
+        envSectionMode: 'Режим установки',
+        envSectionDomain: 'Домен и DNS',
+        envSectionDatabase: 'База данных и Redis',
+        envSectionAws: 'Файлы (AWS S3)',
         serverIp: 'IP этого сервера',
         serverIpUnknown: 'Не удалось определить автоматически — смотри панель VPS',
         dnsType: 'Тип',
@@ -254,15 +275,19 @@
     function dnsHintFor(domain) {
       const d = (domain || '').trim();
       const parts = d.split('.').filter(Boolean);
-      let name = 'api';
-      if (parts.length >= 3) name = parts[0];
-      else if (parts.length === 2) name = '@';
+      let name = '@';
+      let isSubdomain = false;
+      if (parts.length >= 3) {
+        name = parts[0];
+        isSubdomain = true;
+      }
       return {
         type: 'A',
         name,
-        host: d || 'your-domain.com',
+        host: d || 'example.com',
         value: state?.public_ip || '',
         ttl: '300',
+        isSubdomain,
       };
     }
     function renderEnvDnsHint(domain) {
@@ -270,8 +295,9 @@
       if (!el) return;
       const hint = dnsHintFor(domain);
       const ip = hint.value || t('serverIpUnknown');
+      const hintText = hint.isSubdomain ? t('domainDnsHintSub') : t('domainDnsHintRoot');
       el.innerHTML = `
-        <p>${t('domainDnsHint')}</p>
+        <p class="env-section-lead" style="margin-bottom:10px">${hintText}</p>
         <table class="dns-table">
           <tr><td>${t('dnsType')}</td><td><code>${esc(hint.type)}</code></td></tr>
           <tr><td>${t('dnsName')}</td><td><code>${esc(hint.name)}</code> <span style="color:var(--muted)">→ ${esc(hint.host)}</span></td></tr>
@@ -414,8 +440,6 @@
         const mode = d.env_mode || 'simple';
         const awsBlock = `
           <div class="aws-block">
-            <h4>${t('awsTitle')}</h4>
-            <div class="link-row"><a href="#" id="aws-guide-link">${t('awsGuide')} ↗</a></div>
             <div class="form-grid">
               <label>${t('awsRegion')}
                 <select id="aws_s3_region_name">
@@ -425,8 +449,8 @@
               </label>
               <label>${t('awsBucket')}<input type="text" id="aws_storage_bucket_name" autocomplete="off" value="${esc(d.aws_storage_bucket_name || '')}" placeholder="rumble-myserver-prod"></label>
             </div>
-            <details style="margin-top:10px;color:var(--muted);font-size:.85rem">
-              <summary>${t('awsProvision')} (bootstrap credentials)</summary>
+            <details class="env-inner" style="margin-top:12px">
+              <summary style="cursor:pointer;color:var(--text);font-size:.88rem;font-weight:600">${t('awsProvision')} (bootstrap credentials)</summary>
               <div class="form-grid" style="margin-top:10px">
                 <label>${t('awsBootstrapKey')}<input type="text" id="aws_bootstrap_access_key_id" autocomplete="off"></label>
                 <label>${t('awsBootstrapSecret')}<input type="text" id="aws_bootstrap_secret_access_key" autocomplete="off"></label>
@@ -437,6 +461,7 @@
               <label>${t('awsAccessKey')}<input type="text" id="aws_access_key_id" autocomplete="off" value="${esc(d.aws_access_key_id || '')}"></label>
               <label>${t('awsSecretKey')}<input type="text" id="aws_secret_access_key" autocomplete="off" value="${esc(d.aws_secret_access_key || '')}"></label>
             </div>
+            <div class="link-row"><a href="#" id="aws-guide-link">${t('awsGuide')} ↗</a></div>
           </div>`;
         const advancedBlock = `
           <div id="env-advanced-fields">
@@ -461,27 +486,47 @@
             </div>
           </div>`;
         formEl.innerHTML = `
-          <div class="mode-switch">
-            <label><input type="radio" name="env_mode" value="simple" ${mode !== 'advanced' ? 'checked' : ''}> ${t('envSimple')}</label>
-            <label><input type="radio" name="env_mode" value="advanced" ${mode === 'advanced' ? 'checked' : ''}> ${t('envAdvanced')}</label>
-          </div>
-          <p class="desc" id="env-mode-desc">${mode === 'advanced' ? t('envAdvancedDesc') : t('envSimpleDesc')}</p>
-          <p class="desc">${t('domainHelp')}</p>
-          <div class="form-grid">
-            <label>${t('domain')}<input type="text" id="domain" value="${esc(d.domain || state.domain || '')}" placeholder="api.example.com"></label>
-            <label>${t('allowedHosts')}<span style="display:block;font-size:.78rem;color:var(--muted);font-weight:400;margin-top:2px">${t('allowedHostsHelp')}</span><input type="text" id="allowed_hosts" value="${esc(d.allowed_hosts || '')}"></label>
-          </div>
-          <div class="dns-block" id="env-dns-block">
-            <h4>${t('domainDnsTitle')}</h4>
-            <div id="env-dns-records"></div>
-            <div class="actions" style="margin:0">
-              <button type="button" class="btn secondary" id="env-dns-check-btn">${t('checkDnsRecords')}</button>
-            </div>
-            <div id="env-dns-status"></div>
-          </div>
-          <div id="env-advanced-wrap" class="${mode === 'advanced' ? '' : 'hidden'}">${advancedBlock}</div>
-          <div id="env-status-list" class="status-list"></div>
-          ${awsBlock}`;
+          <div class="env-form">
+            <section class="env-section">
+              <h3 class="env-section-title">${t('envSectionMode')}</h3>
+              <div class="mode-switch">
+                <label><input type="radio" name="env_mode" value="simple" ${mode !== 'advanced' ? 'checked' : ''}> ${t('envSimple')}</label>
+                <label><input type="radio" name="env_mode" value="advanced" ${mode === 'advanced' ? 'checked' : ''}> ${t('envAdvanced')}</label>
+              </div>
+              <p class="env-section-lead" id="env-mode-desc" style="margin-top:12px;margin-bottom:0">${mode === 'advanced' ? t('envAdvancedDesc') : t('envSimpleDesc')}</p>
+            </section>
+
+            <section class="env-section">
+              <h3 class="env-section-title">${t('envSectionDomain')}</h3>
+              <p class="env-section-lead">${t('domainHelp')}</p>
+              <div class="form-grid">
+                <label>${t('domain')}<input type="text" id="domain" value="${esc(d.domain || state.domain || '')}" placeholder="${t('domainPlaceholder')}"></label>
+                <label>${t('allowedHosts')}<span style="display:block;font-size:.78rem;color:var(--muted);font-weight:400;margin-top:2px">${t('allowedHostsHelp')}</span><input type="text" id="allowed_hosts" value="${esc(d.allowed_hosts || '')}"></label>
+              </div>
+              <div class="env-inner dns-block" id="env-dns-block">
+                <h4 class="env-inner-title">${t('domainDnsTitle')}</h4>
+                <div id="env-dns-records"></div>
+                <div class="actions" style="margin:0">
+                  <button type="button" class="btn secondary" id="env-dns-check-btn">${t('checkDnsRecords')}</button>
+                </div>
+                <div id="env-dns-status"></div>
+              </div>
+            </section>
+
+            <section class="env-section ${mode === 'advanced' ? '' : 'hidden'}" id="env-advanced-wrap">
+              <h3 class="env-section-title">${t('envSectionDatabase')}</h3>
+              <p class="env-section-lead">${t('envAdvancedDesc')}</p>
+              ${advancedBlock}
+            </section>
+
+            <section class="env-section">
+              <h3 class="env-section-title">${t('envSectionAws')}</h3>
+              <p class="env-section-lead">${t('awsTitle')}</p>
+              ${awsBlock}
+            </section>
+
+            <div id="env-status-list" class="status-list"></div>
+          </div>`;
         formEl.querySelectorAll('input[name="env_mode"]').forEach(r => {
           r.onchange = () => {
             const adv = envMode() === 'advanced';

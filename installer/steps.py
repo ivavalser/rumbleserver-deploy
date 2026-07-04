@@ -188,13 +188,14 @@ def dns_setup_hint(domain: str, public_ip: str | None) -> dict[str, str]:
     elif len(parts) == 2:
         name = "@"
     else:
-        name = domain or "api"
+        name = "@"
     return {
         "type": "A",
         "name": name,
-        "host": domain or "your-domain.com",
+        "host": domain or "example.com",
         "value": public_ip or "",
         "ttl": "300",
+        "is_subdomain": len(parts) >= 3,
     }
 
 
