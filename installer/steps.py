@@ -1028,6 +1028,18 @@ def apply_nginx(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
 
 
 def check_finish(ctx: InstallerContext) -> StepResult:
+    for step in STEPS:
+        if step.id == "finish":
+            break
+        if ctx.get(f"skipped_{step.id}"):
+            continue
+        result = step.check(ctx)
+        if not result.ok:
+            return _fail(
+                "Previous setup steps are not complete yet.",
+                manual=f'Complete "{step.title}" before viewing the summary.',
+            )
+
     domain = ctx.get("domain") or "localhost"
     admin = ctx.get("admin_username") or "admin"
     summary_lines = [
