@@ -20,8 +20,10 @@ curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/
 Для тестовой ветки укажи `RUMBLE_DEPLOY_BRANCH`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/feat/installer/installer.sh | sudo RUMBLE_DEPLOY_BRANCH=feat/installer bash
+curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/feat/installer/installer.sh | sudo env RUMBLE_DEPLOY_BRANCH=feat/installer bash
 ```
+
+> `sudo` сбрасывает env — нужен `sudo env VAR=... bash`, не `sudo VAR=... bash`.
 
 Скрипт:
 - скачает deploy-bundle в `~/rumbleserver` (или `RUMBLE_DIR`)

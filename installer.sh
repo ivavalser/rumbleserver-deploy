@@ -6,8 +6,8 @@ set -e
 # Использование:
 #   curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/installer.sh | sudo bash
 #
-# Другая директория / ветка:
-#   curl -fsSL .../installer.sh | sudo RUMBLE_DIR=/opt/rumble RUMBLE_DEPLOY_BRANCH=feat/installer bash
+# Другая директория / ветка (sudo сбрасывает env — используй env):
+#   curl -fsSL .../installer.sh | sudo env RUMBLE_DEPLOY_BRANCH=feat/installer bash
 
 INSTALL_DIR="${RUMBLE_DIR:-$HOME/rumbleserver}"
 DEPLOY_REPO="${RUMBLE_DEPLOY_REPO:-https://github.com/ivavalser/rumbleserver-deploy.git}"
@@ -15,6 +15,28 @@ DEPLOY_BRANCH="${RUMBLE_DEPLOY_BRANCH:-main}"
 INSTALLER_PORT="${INSTALLER_PORT:-8800}"
 PID_FILE="${INSTALL_DIR}/.installer.pid"
 TOKEN_FILE="${INSTALL_DIR}/.installer.token"
+
+_clone_deploy_branch() {
+    local branch="$1"
+    rm -rf "$INSTALL_DIR"
+    echo "⬇️  Клонирую $DEPLOY_REPO → $INSTALL_DIR (ветка ${branch})..."
+    git clone --depth 1 --branch "$branch" "$DEPLOY_REPO" "$INSTALL_DIR"
+}
+
+_ensure_deploy_files() {
+    local -a branches=()
+    local b
+    branches+=("$DEPLOY_BRANCH")
+    for b in feat/installer main; do
+        if [ "$b" != "$DEPLOY_BRANCH" ]; then
+            branches+=("$b")
+        fi
+    done
+    for b in "${branches[@]}"; do
+        _clone_deploy_branch "$b" && [ -f "$INSTALL_DIR/installer/server.py" ] && return 0
+    done
+    return 1
+}
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "❌ Запусти от root: curl ... | sudo bash"
@@ -57,23 +79,43 @@ elif [ -f "$(dirname "$0")/installer/server.py" ]; then
     INSTALL_DIR="$(cd "$(dirname "$0")" && pwd)"
     echo "✅ Локальный режим: $INSTALL_DIR"
 else
-    echo "⬇️  Клонирую deploy-репозиторий в $INSTALL_DIR (ветка ${DEPLOY_BRANCH})..."
-    git clone --depth 1 --branch "$DEPLOY_BRANCH" "$DEPLOY_REPO" "$INSTALL_DIR"
+    _ensure_deploy_files || true
 fi
 
-# Если ранее клонировали main без installer/ — переклонируем нужную ветку
-if [ ! -f "$INSTALL_DIR/installer/server.py" ] && [ -d "$INSTALL_DIR/.git" ]; then
-    echo "⚠️  installer/ не найден, переклонирую ветку ${DEPLOY_BRANCH}..."
-    rm -rf "$INSTALL_DIR"
-    git clone --depth 1 --branch "$DEPLOY_BRANCH" "$DEPLOY_REPO" "$INSTALL_DIR"
+# Обновление существующего clone или повторная попытка других веток
+if [ ! -f "$INSTALL_DIR/installer/server.py" ]; then
+    if [ -d "$INSTALL_DIR/.git" ]; then
+        REMOTE="$(git -C "$INSTALL_DIR" remote get-url origin 2>/dev/null || true)"
+        if [[ "$REMOTE" == *"rumbleserver-deploy"* ]]; then
+            echo "🔄 Обновляю deploy-файлы (ветка ${DEPLOY_BRANCH})..."
+            git -C "$INSTALL_DIR" fetch origin "$DEPLOY_BRANCH" --depth 1 2>/dev/null || true
+            git -C "$INSTALL_DIR" checkout "$DEPLOY_BRANCH" 2>/dev/null || true
+            git -C "$INSTALL_DIR" pull --ff-only origin "$DEPLOY_BRANCH" 2>/dev/null || true
+        fi
+    fi
+fi
+
+if [ ! -f "$INSTALL_DIR/installer/server.py" ]; then
+    echo "⚠️  installer/ не найден, пробую другие ветки..."
+    _ensure_deploy_files || true
+fi
+
+cd "$INSTALL_DIR" 2>/dev/null || true
+
+if [ ! -f "$INSTALL_DIR/installer/server.py" ]; then
+    echo "❌ installer/server.py не найден в $INSTALL_DIR"
+    echo ""
+    echo "   Попробуй явно указать ветку (sudo сбрасывает переменные окружения):"
+    echo "   curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/feat/installer/installer.sh | sudo env RUMBLE_DEPLOY_BRANCH=feat/installer bash"
+    echo ""
+    echo "   Или вручную:"
+    echo "   rm -rf $INSTALL_DIR"
+    echo "   git clone --depth 1 --branch feat/installer $DEPLOY_REPO $INSTALL_DIR"
+    echo "   $INSTALL_DIR/installer.sh"
+    exit 1
 fi
 
 cd "$INSTALL_DIR"
-
-if [ ! -f installer/server.py ]; then
-    echo "❌ installer/server.py не найден в $INSTALL_DIR"
-    exit 1
-fi
 
 mkdir -p backups
 
