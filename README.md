@@ -37,24 +37,32 @@ curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/
 curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/feat/installer/installer.sh | sudo env RUMBLE_DEPLOY_BRANCH=feat/installer bash
 ```
 
-**Перезапуск / новая версия установщика** — сначала останови старый процесс, удали папку, потом скачивай заново:
+**Обновить установщик (сохранить прогресс)** — только остановить процесс и запустить снова. Папку **не удалять**: в ней `.env`, `.installer-state.json` и прогресс по шагам.
 
 ```bash
 INSTALL_DIR="${RUMBLE_DIR:-/root/rumbleserver}"
 
-# 1. Остановить текущий установщик
 kill "$(cat "$INSTALL_DIR/.installer.pid")" 2>/dev/null || true
 
-# 2. Удалить старый bundle
-rm -rf "$INSTALL_DIR"
-
-# 3. Запустить установщик снова
 curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/feat/installer/installer.sh \
   | sudo env RUMBLE_DEPLOY_BRANCH=feat/installer bash
 ```
 
-> Если использовал другую директорию — подставь свой путь вместо `/root/rumbleserver`
-> (или задай `RUMBLE_DIR=/opt/rumble` в шаге 3: `sudo env RUMBLE_DIR=... RUMBLE_DEPLOY_BRANCH=... bash`).
+Откроется новая ссылка с новым token, но шаги подтянутся из `.env` и state-файла — попадёшь на первый незавершённый шаг (например AWS, если `.env` уже сохранён).
+
+**Начать установку с нуля** — только если нужен полный сброс:
+
+```bash
+INSTALL_DIR="${RUMBLE_DIR:-/root/rumbleserver}"
+
+kill "$(cat "$INSTALL_DIR/.installer.pid")" 2>/dev/null || true
+rm -rf "$INSTALL_DIR"
+
+curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/feat/installer/installer.sh \
+  | sudo env RUMBLE_DEPLOY_BRANCH=feat/installer bash
+```
+
+> `rm -rf` удаляет `.env` и `.installer-state.json` — весь прогресс визарда теряется. Для обновления UI установщика он **не нужен**.
 
 > `sudo` сбрасывает env — нужен `sudo env VAR=... bash`, не `sudo VAR=... bash`.
 

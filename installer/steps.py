@@ -48,6 +48,45 @@ class InstallerContext:
         self.override_file = install_dir / "docker-compose.override.yml"
         self.nginx_template = install_dir / "installer" / "nginx.conf.template"
         self._state = self._load_state()
+        self._rehydrate_from_env()
+
+    def _rehydrate_from_env(self) -> None:
+        """Restore wizard state from .env when state file was lost (installer restart without rm)."""
+        if not self.env_path.exists():
+            return
+        text = self.env_path.read_text(encoding="utf-8")
+        env_keys = {
+            "ALLOWED_HOSTS": "allowed_hosts",
+            "AWS_ACCESS_KEY_ID": "aws_access_key_id",
+            "AWS_SECRET_ACCESS_KEY": "aws_secret_access_key",
+            "AWS_STORAGE_BUCKET_NAME": "aws_storage_bucket_name",
+            "AWS_S3_REGION_NAME": "aws_s3_region_name",
+            "AWS_S3_ENDPOINT_URL": "aws_s3_endpoint_url",
+            "DB_PASS": "db_pass",
+            "DB_NAME": "db_name",
+            "DB_USER": "db_user",
+            "DB_HOST": "db_host",
+            "DB_PORT": "db_port",
+            "REDIS_PASSWORD": "redis_password",
+            "REDIS_HOST": "redis_host",
+            "REDIS_PORT": "redis_port",
+            "SECRET_KEY": "secret_key",
+        }
+        updates: dict[str, Any] = {}
+        for env_key, ctx_key in env_keys.items():
+            val = _env_value(text, env_key)
+            if val and not self.get(ctx_key):
+                updates[ctx_key] = val
+        allowed = updates.get("allowed_hosts") or self.get("allowed_hosts") or _env_value(
+            text, "ALLOWED_HOSTS"
+        )
+        if allowed and not self.get("domain"):
+            domain = _domain_from_allowed_hosts(allowed)
+            if domain:
+                updates["domain"] = domain
+        if updates:
+            self._state.update(updates)
+            self.save_state()
 
     def _load_state(self) -> dict[str, Any]:
         if self.state_file.exists():
@@ -357,6 +396,14 @@ def apply_ghcr(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
 
 def _endpoint_for_region(region: str) -> str:
     return f"https://s3.{region}.amazonaws.com"
+
+
+def _domain_from_allowed_hosts(allowed: str) -> str:
+    for part in allowed.split(","):
+        host = part.strip()
+        if host and host not in ("localhost", "127.0.0.1"):
+            return host
+    return ""
 
 
 def _env_value(text: str, key: str) -> str:

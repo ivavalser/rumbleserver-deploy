@@ -10,6 +10,12 @@ set -e
 #   curl -fsSL .../installer.sh | sudo env RUMBLE_DEPLOY_BRANCH=feat/installer bash
 #
 # Restart / update installer (on VPS):
+#
+# Keep wizard progress (.env + .installer-state.json):
+#   kill $(cat /root/rumbleserver/.installer.pid) 2>/dev/null || true
+#   curl -fsSL .../installer.sh | sudo env RUMBLE_DEPLOY_BRANCH=feat/installer bash
+#
+# Start completely over:
 #   kill $(cat /root/rumbleserver/.installer.pid) 2>/dev/null || true
 #   rm -rf /root/rumbleserver
 #   curl -fsSL .../installer.sh | sudo env RUMBLE_DEPLOY_BRANCH=feat/installer bash
@@ -101,7 +107,11 @@ if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
     echo ""
     echo "⚠️  Installer is already running (PID $(cat "$PID_FILE"))."
     echo ""
-    echo "To restart with a new version:"
+    echo "To update the installer (keep progress):"
+    echo "  kill \$(cat $PID_FILE)"
+    echo "  curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/feat/installer/installer.sh | sudo env RUMBLE_DEPLOY_BRANCH=feat/installer bash"
+    echo ""
+    echo "To start completely over:"
     echo "  kill \$(cat $PID_FILE)"
     echo "  rm -rf $INSTALL_DIR"
     echo "  curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/feat/installer/installer.sh | sudo env RUMBLE_DEPLOY_BRANCH=feat/installer bash"

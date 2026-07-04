@@ -10,7 +10,8 @@ set -e
 # To run a fresh installer on VPS (stop old process, remove dir) — SSH first:
 #   kill $(cat /root/rumbleserver/.installer.pid) 2>/dev/null || true
 #   rm -rf /root/rumbleserver
-# then run this script again.
+#
+# To update installer UI but keep progress — only kill + rerun curl (no rm -rf).
 #
 # Requires: ssh, curl on the remote host, open (macOS) or xdg-open (Linux desktop)
 
