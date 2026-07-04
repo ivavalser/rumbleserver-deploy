@@ -112,6 +112,10 @@ class InstallerHandler(BaseHTTPRequestHandler):
             self._file_response(INSTALL_DIR / "installer" / "index.html", "text/html; charset=utf-8")
             return
 
+        if path in ("/aws-guide.html", "/aws-guide"):
+            self._file_response(INSTALL_DIR / "installer" / "aws-guide.html", "text/html; charset=utf-8")
+            return
+
         if path == "/api/state":
             if not self._require_auth():
                 return
@@ -228,6 +232,34 @@ class InstallerHandler(BaseHTTPRequestHandler):
                         "manual": step.skip_manual,
                         "cwd": str(INSTALL_DIR),
                         "data": {},
+                    },
+                )
+            return
+
+        if path == "/api/aws/provision":
+            payload = self._read_json()
+            try:
+                from aws_setup import provision_s3
+
+                result = provision_s3(
+                    bootstrap_access_key=(payload.get("aws_bootstrap_access_key_id") or "").strip(),
+                    bootstrap_secret_key=(payload.get("aws_bootstrap_secret_access_key") or "").strip(),
+                    region=(payload.get("aws_s3_region_name") or "eu-north-1").strip(),
+                    bucket_name=(payload.get("aws_storage_bucket_name") or "").strip(),
+                    log=append_log,
+                )
+                self._json_response(
+                    HTTPStatus.OK,
+                    {"ok": True, "message": "AWS S3 bucket and IAM user created.", **result},
+                )
+            except Exception as exc:
+                append_log(traceback.format_exc())
+                self._json_response(
+                    HTTPStatus.OK,
+                    {
+                        "ok": False,
+                        "message": str(exc),
+                        "manual": "Open /aws-guide.html for manual setup instructions.",
                     },
                 )
             return

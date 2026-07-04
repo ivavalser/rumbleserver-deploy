@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rumble Server — AWS S3 Setup</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 820px; margin: 0 auto; padding: 24px; line-height: 1.55; color: #1a1a1a; }
+    h1 { font-size: 1.5rem; }
+    h2 { font-size: 1.15rem; margin-top: 2rem; border-bottom: 1px solid #ddd; padding-bottom: 6px; }
+    code, pre { background: #f4f4f5; border-radius: 6px; font-size: 0.88rem; }
+    pre { padding: 14px; overflow: auto; }
+    a { color: #2563eb; }
+    .note { background: #eff6ff; border: 1px solid #bfdbfe; padding: 12px 14px; border-radius: 8px; }
+    ol li { margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <h1>AWS S3 setup for Rumble Server</h1>
+  <p>Rumble stores uploaded files (messages, avatars) in S3. You need a <strong>private bucket</strong> and an <strong>IAM user</strong> with programmatic access.</p>
+
+  <div class="note">
+    <strong>Automatic setup:</strong> in the installer, use <em>Create S3 bucket &amp; IAM user</em> with bootstrap AWS credentials (IAM user that can create S3 buckets and IAM policies).<br>
+    <strong>Manual setup:</strong> follow the steps below, then paste keys into the installer.
+  </div>
+
+  <h2>1. Choose a region</h2>
+  <p>Pick a region close to your VPS (e.g. <code>eu-north-1</code>, <code>eu-west-1</code>). Use the same region in the installer and in <code>AWS_S3_REGION_NAME</code>.</p>
+  <p><a href="https://console.aws.amazon.com/s3/home" target="_blank" rel="noopener">Open S3 Console →</a></p>
+
+  <h2>2. Create a bucket</h2>
+  <ol>
+    <li>Click <strong>Create bucket</strong></li>
+    <li><strong>Bucket name:</strong> globally unique, lowercase (e.g. <code>rumble-myserver-prod</code>)</li>
+    <li><strong>Region:</strong> your chosen region</li>
+    <li><strong>Block all public access:</strong> keep enabled ✓</li>
+    <li>Leave other defaults → <strong>Create bucket</strong></li>
+  </ol>
+
+  <h2>3. Create IAM policy</h2>
+  <p><a href="https://console.aws.amazon.com/iam/home#/policies" target="_blank" rel="noopener">IAM → Policies → Create policy</a> → JSON:</p>
+  <pre id="policy-template">{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ListBucket",
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket"],
+      "Resource": "arn:aws:s3:::YOUR_BUCKET_NAME"
+    },
+    {
+      "Sid": "ObjectAccess",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:AbortMultipartUpload",
+        "s3:ListMultipartUploadParts"
+      ],
+      "Resource": "arn:aws:s3:::YOUR_BUCKET_NAME/*"
+    }
+  ]
+}</pre>
+  <p>Name: <code>RumbleServerS3-YOUR_BUCKET_NAME</code> → Create policy.</p>
+
+  <h2>4. Create IAM user</h2>
+  <ol>
+    <li><a href="https://console.aws.amazon.com/iam/home#/users" target="_blank" rel="noopener">IAM → Users → Create user</a></li>
+    <li>Name: <code>rumbleserver-s3</code></li>
+    <li>Attach the policy from step 3</li>
+    <li>After creation: <strong>Security credentials → Create access key</strong> → <em>Application running outside AWS</em></li>
+    <li>Save <strong>Access key ID</strong> and <strong>Secret access key</strong> (shown once)</li>
+  </ol>
+
+  <h2>5. Bootstrap credentials (for automatic setup only)</h2>
+  <p>To use <em>Create S3 bucket &amp; IAM user</em> in the installer, provide a separate IAM user (or admin) with permissions to:</p>
+  <ul>
+    <li><code>s3:CreateBucket</code>, <code>s3:PutPublicAccessBlock</code></li>
+    <li><code>iam:CreatePolicy</code>, <code>iam:CreateUser</code>, <code>iam:AttachUserPolicy</code>, <code>iam:CreateAccessKey</code></li>
+  </ul>
+  <p>Do <strong>not</strong> use bootstrap keys in production <code>.env</code> — the installer creates a scoped app user.</p>
+
+  <h2>6. Fill in the installer</h2>
+  <ul>
+    <li><code>AWS_ACCESS_KEY_ID</code> — app user access key</li>
+    <li><code>AWS_SECRET_ACCESS_KEY</code> — app user secret</li>
+    <li><code>AWS_STORAGE_BUCKET_NAME</code> — bucket name</li>
+    <li><code>AWS_S3_REGION_NAME</code> — e.g. <code>eu-north-1</code></li>
+    <li><code>AWS_S3_ENDPOINT_URL</code> — <code>https://s3.&lt;region&gt;.amazonaws.com</code></li>
+  </ul>
+
+  <h2>7. Verify</h2>
+  <pre>aws s3 ls s3://YOUR_BUCKET_NAME --region YOUR_REGION</pre>
+  <p>After deploy, upload a file via the app and confirm it appears in the bucket.</p>
+
+  <script>
+    const bucket = new URLSearchParams(location.search).get('bucket');
+    if (bucket) {
+      document.getElementById('policy-template').textContent =
+        document.getElementById('policy-template').textContent.replaceAll('YOUR_BUCKET_NAME', bucket);
+    }
+  </script>
+</body>
+</html>

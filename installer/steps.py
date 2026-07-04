@@ -235,22 +235,22 @@ def apply_system(ctx: InstallerContext, _payload: dict[str, Any]) -> StepResult:
 def check_ufw(ctx: InstallerContext) -> StepResult:
     if not shutil.which("ufw"):
         return _fail(
-            "ufw is not installed.",
+            "UFW is not installed yet.",
             manual="sudo apt-get install -y ufw",
             cwd="/",
         )
     status = ctx.run(["ufw", "status"], check=False)
     text = (status.stdout or "") + (status.stderr or "")
     if "Status: active" not in text:
-        return _fail("ufw is not enabled.", manual="sudo ufw enable")
+        return _fail("UFW is not enabled yet.", manual="sudo ufw enable")
     for port in ("22/tcp", "80/tcp", "443/tcp"):
         if port not in text:
             return _fail(
-                f"Port {port} is not open in ufw.",
+                f"Port {port} is not open yet.",
                 manual=f"sudo ufw allow {port}",
                 cwd="/",
             )
-    return _ok("ufw is active, ports 22/80/443 are open.")
+    return _ok("UFW is active, ports 22/80/443 are open.")
 
 
 def apply_ufw(ctx: InstallerContext, _payload: dict[str, Any]) -> StepResult:
@@ -269,17 +269,17 @@ def apply_ufw(ctx: InstallerContext, _payload: dict[str, Any]) -> StepResult:
 def check_docker(ctx: InstallerContext) -> StepResult:
     if not shutil.which("docker"):
         return _fail(
-            "Docker is not installed.",
+            "Docker is not installed yet.",
             manual="curl -fsSL https://get.docker.com | sudo sh",
             cwd="/",
         )
     version = ctx.run(["docker", "--version"], check=False)
     if version.returncode != 0:
-        return _fail("docker is not running.", manual="sudo systemctl start docker")
+        return _fail("Docker is installed but not running.", manual="sudo systemctl start docker")
     compose = ctx.run(ctx.docker_compose_cmd() + ["version"], check=False)
     if compose.returncode != 0:
         return _fail(
-            "Docker Compose plugin is not installed.",
+            "Docker Compose plugin is not installed yet.",
             manual="sudo apt-get install -y docker-compose-plugin",
             cwd="/",
         )
@@ -299,9 +299,9 @@ def check_ghcr(ctx: InstallerContext) -> StepResult:
     if config_path.exists() and registry in config_path.read_text(encoding="utf-8"):
         return _ok("Logged in to GHCR.")
     if ctx.get("ghcr_key"):
-        return _fail("Key saved but GHCR login failed.")
+        return _fail("GHCR login failed — check the access key.")
     return _fail(
-        "No access to ghcr.io.",
+        "GHCR login is required.",
         manual=(
             "Enter the image access key in the form below or run:\n"
             "  echo YOUR_KEY | docker login ghcr.io -u rmbldeploy --password-stdin"
@@ -325,9 +325,82 @@ def apply_ghcr(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
     return check_ghcr(ctx)
 
 
+def _endpoint_for_region(region: str) -> str:
+    return f"https://s3.{region}.amazonaws.com"
+
+
+def _aws_configured(text: str) -> bool:
+    placeholders = (
+        "your_aws_access_key",
+        "your-bucket-name",
+        "your_aws_secret",
+        "change_this",
+    )
+    if any(p in text for p in placeholders):
+        return False
+    for key in (
+        "AWS_ACCESS_KEY_ID=",
+        "AWS_SECRET_ACCESS_KEY=",
+        "AWS_STORAGE_BUCKET_NAME=",
+        "AWS_S3_REGION_NAME=",
+        "AWS_S3_ENDPOINT_URL=",
+    ):
+        if key not in text:
+            return False
+    return True
+
+
+def _env_apply_statuses(payload: dict[str, Any], ctx: InstallerContext) -> list[dict[str, Any]]:
+    domain = payload.get("domain") or ctx.get("domain") or ""
+    allowed = payload.get("allowed_hosts") or domain
+    simple = (payload.get("env_mode") or ctx.get("env_mode") or "simple") == "simple"
+    items = [
+        {"label": ".env file created", "ok": ctx.env_path.exists()},
+        {"label": "SECRET_KEY generated", "ok": bool(payload.get("secret_key"))},
+        {"label": f"ALLOWED_HOSTS set ({allowed})", "ok": bool(allowed)},
+    ]
+    if simple:
+        items.extend(
+            [
+                {
+                    "label": "PostgreSQL credentials added (Docker)",
+                    "ok": not payload.get("use_external_db"),
+                },
+                {
+                    "label": "Redis credentials added (Docker)",
+                    "ok": not payload.get("use_external_redis"),
+                },
+            ]
+        )
+    else:
+        items.extend(
+            [
+                {
+                    "label": "PostgreSQL connection configured",
+                    "ok": bool(payload.get("db_host")),
+                },
+                {
+                    "label": "Redis connection configured",
+                    "ok": bool(payload.get("redis_host")),
+                },
+            ]
+        )
+    items.append(
+        {
+            "label": "AWS S3 credentials added",
+            "ok": _aws_configured(ctx.env_path.read_text(encoding="utf-8"))
+            if ctx.env_path.exists()
+            else False,
+        }
+    )
+    return items
+
+
 def _default_env_payload(ctx: InstallerContext) -> dict[str, Any]:
     domain = ctx.get("domain") or ""
+    region = ctx.get("aws_s3_region_name") or "eu-north-1"
     return {
+        "env_mode": ctx.get("env_mode") or "simple",
         "domain": domain,
         "allowed_hosts": ctx.get("allowed_hosts") or domain or "localhost,127.0.0.1",
         "db_pass": ctx.get("db_pass") or _generate_secret(24),
@@ -346,15 +419,16 @@ def _default_env_payload(ctx: InstallerContext) -> dict[str, Any]:
         "aws_storage_bucket_name": ctx.get("aws_storage_bucket_name") or "",
         "aws_s3_region_name": ctx.get("aws_s3_region_name") or "eu-north-1",
         "aws_s3_endpoint_url": ctx.get("aws_s3_endpoint_url")
-        or "https://s3.eu-north-1.amazonaws.com",
+        or _endpoint_for_region(region),
     }
 
 
 def _write_env_file(ctx: InstallerContext, payload: dict[str, Any]) -> None:
     domain = (payload.get("domain") or "").strip()
     allowed = (payload.get("allowed_hosts") or domain or "localhost,127.0.0.1").strip()
-    use_external_db = bool(payload.get("use_external_db"))
-    use_external_redis = bool(payload.get("use_external_redis"))
+    env_mode = payload.get("env_mode") or "simple"
+    use_external_db = bool(payload.get("use_external_db")) if env_mode == "advanced" else False
+    use_external_redis = bool(payload.get("use_external_redis")) if env_mode == "advanced" else False
 
     db_name = payload.get("db_name") or "rumbleserver_db"
     db_user = payload.get("db_user") or "rumbleserver_user"
@@ -368,6 +442,12 @@ def _write_env_file(ctx: InstallerContext, payload: dict[str, Any]) -> None:
     redis_url = f"redis://:{redis_password}@{redis_host}:{redis_port}/0"
 
     secret_key = payload.get("secret_key") or _generate_django_secret()
+    region = payload.get("aws_s3_region_name") or "eu-north-1"
+    endpoint = payload.get("aws_s3_endpoint_url") or _endpoint_for_region(region)
+
+    aws_key = (payload.get("aws_access_key_id") or "").strip()
+    aws_secret = (payload.get("aws_secret_access_key") or "").strip()
+    aws_bucket = (payload.get("aws_storage_bucket_name") or "").strip()
 
     lines = [
         "# Generated by Rumble Server installer",
@@ -386,11 +466,11 @@ def _write_env_file(ctx: InstallerContext, payload: dict[str, Any]) -> None:
         f"REDIS_PASSWORD={redis_password}",
         f"REDIS_URL={redis_url}",
         "",
-        f"AWS_ACCESS_KEY_ID={payload.get('aws_access_key_id') or 'your_aws_access_key_id'}",
-        f"AWS_SECRET_ACCESS_KEY={payload.get('aws_secret_access_key') or 'your_aws_secret_access_key'}",
-        f"AWS_STORAGE_BUCKET_NAME={payload.get('aws_storage_bucket_name') or 'your-bucket-name'}",
-        f"AWS_S3_REGION_NAME={payload.get('aws_s3_region_name') or 'eu-north-1'}",
-        f"AWS_S3_ENDPOINT_URL={payload.get('aws_s3_endpoint_url') or 'https://s3.eu-north-1.amazonaws.com'}",
+        f"AWS_ACCESS_KEY_ID={aws_key}",
+        f"AWS_SECRET_ACCESS_KEY={aws_secret}",
+        f"AWS_STORAGE_BUCKET_NAME={aws_bucket}",
+        f"AWS_S3_REGION_NAME={region}",
+        f"AWS_S3_ENDPOINT_URL={endpoint}",
         "",
     ]
     ctx.env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -398,6 +478,7 @@ def _write_env_file(ctx: InstallerContext, payload: dict[str, Any]) -> None:
 
     ctx.update(
         {
+            "env_mode": env_mode,
             "domain": domain,
             "allowed_hosts": allowed,
             "db_pass": db_pass,
@@ -413,10 +494,9 @@ def _write_env_file(ctx: InstallerContext, payload: dict[str, Any]) -> None:
             "use_external_redis": use_external_redis,
             "aws_access_key_id": payload.get("aws_access_key_id") or "",
             "aws_secret_access_key": payload.get("aws_secret_access_key") or "",
-            "aws_storage_bucket_name": payload.get("aws_storage_bucket_name") or "",
-            "aws_s3_region_name": payload.get("aws_s3_region_name") or "eu-north-1",
-            "aws_s3_endpoint_url": payload.get("aws_s3_endpoint_url")
-            or "https://s3.eu-north-1.amazonaws.com",
+            "aws_storage_bucket_name": aws_bucket,
+            "aws_s3_region_name": region,
+            "aws_s3_endpoint_url": endpoint,
         }
     )
     _write_compose_override(ctx, use_external_db, use_external_redis)
@@ -471,38 +551,70 @@ def _write_compose_override(
 def check_env(ctx: InstallerContext) -> StepResult:
     if not ctx.env_path.exists():
         return _fail(
-            ".env file not found.",
-            manual=f"Fill in the form or create: {ctx.env_path}",
+            "The server .env file has not been created yet.",
+            manual=f"Use the form above or create manually: {ctx.env_path}",
             cwd=str(ctx.install_dir),
         )
     text = ctx.env_path.read_text(encoding="utf-8")
     required = ["SECRET_KEY=", "DB_PASS=", "REDIS_PASSWORD=", "ALLOWED_HOSTS="]
     missing = [k for k in required if k not in text]
     if missing:
-        return _fail(f".env is missing: {', '.join(missing)}")
+        return _fail(f"The .env file is incomplete — missing: {', '.join(missing)}")
     if "change_this" in text or "your-secret-key" in text:
-        return _fail(".env still contains placeholder values.")
-    return _ok(".env is configured.", defaults=_default_env_payload(ctx))
+        return _fail("The .env file still contains placeholder values — replace them.")
+    if not _aws_configured(text):
+        return _fail(
+            "AWS S3 credentials are not set yet.",
+            manual="Fill in AWS credentials or use Create S3 bucket & IAM user in the installer.",
+        )
+    defaults = _default_env_payload(ctx)
+    return _ok("Server .env file is configured.", defaults=defaults)
 
 
 def apply_env(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
     merged = _default_env_payload(ctx)
     merged.update(payload)
-    if merged.get("use_external_db") and not merged.get("db_host"):
-        return _fail("Set DB_HOST for external PostgreSQL.")
-    if merged.get("use_external_redis") and not merged.get("redis_host"):
-        return _fail("Set REDIS_HOST for external Redis.")
+    env_mode = merged.get("env_mode") or "simple"
+    merged["env_mode"] = env_mode
+
+    if env_mode == "simple":
+        merged["use_external_db"] = False
+        merged["use_external_redis"] = False
+    else:
+        if merged.get("use_external_db") and not merged.get("db_host"):
+            return _fail("Set DB_HOST for external PostgreSQL.")
+        if merged.get("use_external_redis") and not merged.get("redis_host"):
+            return _fail("Set REDIS_HOST for external Redis.")
+
+    if not (merged.get("aws_access_key_id") and merged.get("aws_secret_access_key")):
+        return _fail("AWS access key and secret are required.")
+    if not merged.get("aws_storage_bucket_name"):
+        return _fail("AWS bucket name is required.")
+
+    if env_mode == "simple":
+        merged.setdefault("db_pass", _generate_secret(24))
+        merged.setdefault("redis_password", _generate_secret(24))
+        merged.setdefault("secret_key", _generate_django_secret())
+
     _write_env_file(ctx, merged)
-    return check_env(ctx)
+    result = check_env(ctx)
+    if result.ok:
+        statuses = _env_apply_statuses(merged, ctx)
+        return StepResult(
+            ok=True,
+            message="Configuration saved.",
+            data={"defaults": _default_env_payload(ctx), "statuses": statuses},
+        )
+    return result
 
 
 def check_deploy(ctx: InstallerContext) -> StepResult:
     if not ctx.env_path.exists():
-        return _fail("Configure .env first.")
+        return _fail("Complete the .env step first.")
     ps = ctx.run(ctx.compose_base() + ["ps", "--format", "json"], check=False)
     if ps.returncode != 0:
         return _fail(
-            "Containers are not running.",
+            "Application containers are not running yet.",
             manual=f"cd {ctx.install_dir} && {' '.join(ctx.compose_base())} up -d",
             cwd=str(ctx.install_dir),
         )
@@ -510,7 +622,7 @@ def check_deploy(ctx: InstallerContext) -> StepResult:
     for name in ("rumbleserver_web",):
         if name not in running:
             return _fail(
-                f"Container {name} is not running.",
+                f"Container {name} is not running yet.",
                 manual=f"cd {ctx.install_dir} && {' '.join(ctx.compose_base())} up -d",
                 cwd=str(ctx.install_dir),
             )
@@ -550,7 +662,7 @@ def apply_deploy(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
 def check_superuser(ctx: InstallerContext) -> StepResult:
     username = ctx.get("admin_username")
     if not username:
-        return _fail("Superuser not created.", manual="Fill in the form below.")
+        return _fail("Superuser has not been created yet.", manual="Fill in the form below.")
     safe_user = username.replace("'", "\\'")
     proc = ctx.run(
         ctx.compose_base()
@@ -572,7 +684,7 @@ def check_superuser(ctx: InstallerContext) -> StepResult:
     if proc.returncode == 0 and "True" in (proc.stdout or ""):
         return _ok(f"Superuser '{username}' exists.")
     return _fail(
-        f"Superuser '{username}' not found.",
+        f"Superuser '{username}' was not found.",
         manual=(
             f"cd {ctx.install_dir}\n"
             f"{' '.join(ctx.compose_base())} exec web python manage.py createsuperuser"
@@ -623,13 +735,13 @@ def apply_superuser(ctx: InstallerContext, payload: dict[str, Any]) -> StepResul
 def check_nginx(ctx: InstallerContext) -> StepResult:
     domain = (ctx.get("domain") or "").strip()
     if not domain:
-        return _fail("Domain not set. Go back to the .env step.")
+        return _fail("Domain is not set — complete the .env step first.")
     if not shutil.which("nginx"):
-        return _fail("nginx is not installed.", manual="sudo apt-get install -y nginx")
+        return _fail("Nginx is not installed yet.", manual="sudo apt-get install -y nginx")
     conf = Path("/etc/nginx/sites-enabled/rumbleserver")
     if not conf.exists():
         return _fail(
-            "nginx config not found.",
+            "Nginx site config is not set up yet.",
             manual="sudo nano /etc/nginx/sites-available/rumbleserver",
             cwd="/etc/nginx/sites-available",
         )
@@ -756,8 +868,8 @@ def apply_finish(ctx: InstallerContext, _payload: dict[str, Any]) -> StepResult:
 STEPS: list[StepDef] = [
     StepDef(
         id="system",
-        title="System check",
-        description="Ubuntu/Debian, root, python3",
+        title="System requirements",
+        description="Ubuntu/Debian, root, Python 3",
         check=check_system,
         apply=apply_system,
         skip_manual="Ensure Ubuntu 22.04+ or Debian 11+, python3 installed, commands run as root.",
@@ -765,7 +877,7 @@ STEPS: list[StepDef] = [
     StepDef(
         id="ufw",
         title="Firewall (UFW)",
-        description="Ports 22, 80, 443",
+        description="Open ports 22, 80, 443",
         check=check_ufw,
         apply=apply_ufw,
         skip_manual="Configure firewall manually: allow 22/tcp, 80/tcp, 443/tcp.",
@@ -773,15 +885,15 @@ STEPS: list[StepDef] = [
     StepDef(
         id="docker",
         title="Docker",
-        description="Docker Engine + Compose plugin",
+        description="Engine and Compose plugin",
         check=check_docker,
         apply=apply_docker,
         skip_manual="Install Docker: curl -fsSL https://get.docker.com | sudo sh && sudo apt-get install -y docker-compose-plugin",
     ),
     StepDef(
         id="ghcr",
-        title="Image access (GHCR)",
-        description="Key from maintainer",
+        title="Container registry (GHCR)",
+        description="Access key from maintainer",
         check=check_ghcr,
         apply=apply_ghcr,
         needs_form=True,
@@ -789,24 +901,24 @@ STEPS: list[StepDef] = [
     ),
     StepDef(
         id="env",
-        title=".env configuration",
-        description="Domain, passwords, AWS",
+        title="Server configuration (.env)",
+        description="Domain, database, Redis, AWS S3",
         check=check_env,
         apply=apply_env,
         needs_form=True,
-        skip_manual="Create .env from env.example and set ALLOWED_HOSTS, DB_PASS, REDIS_PASSWORD.",
+        skip_manual="Create .env from env.example with ALLOWED_HOSTS, DB/Redis, and AWS S3 credentials.",
     ),
     StepDef(
         id="deploy",
-        title="Deploy",
-        description="docker compose pull && up -d",
+        title="Deploy application",
+        description="Pull images and start services",
         check=check_deploy,
         apply=apply_deploy,
         skip_manual="cd ~/rumbleserver && ./prod.sh",
     ),
     StepDef(
         id="superuser",
-        title="Django Admin",
+        title="Django Admin account",
         description="First superuser",
         check=check_superuser,
         apply=apply_superuser,
@@ -815,7 +927,7 @@ STEPS: list[StepDef] = [
     ),
     StepDef(
         id="nginx",
-        title="Nginx + HTTPS",
+        title="Nginx and HTTPS",
         description="Reverse proxy and Let's Encrypt",
         check=check_nginx,
         apply=apply_nginx,
@@ -824,8 +936,8 @@ STEPS: list[StepDef] = [
     ),
     StepDef(
         id="finish",
-        title="Done",
-        description="Installation summary",
+        title="Installation complete",
+        description="Summary and next steps",
         check=check_finish,
         apply=apply_finish,
     ),

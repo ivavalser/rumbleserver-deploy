@@ -54,6 +54,17 @@
     .checkbox-row input { width: auto; }
     .log { flex: 1; background: #0b0f14; border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; overflow: auto; white-space: pre-wrap; color: #94a3b8; max-height: 320px; }
     .hidden { display: none !important; }
+    .mode-switch { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .mode-switch label { flex-direction: row; align-items: center; gap: 8px; cursor: pointer; color: var(--text); font-size: 0.9rem; }
+    .mode-switch input { width: auto; }
+    .status-list { margin: 12px 0 16px; }
+    .status-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 0.9rem; }
+    .status-item.ok { color: var(--ok); }
+    .status-item.fail { color: var(--err); }
+    .aws-block { border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-top: 12px; }
+    .aws-block h4 { margin: 0 0 10px; font-size: 0.95rem; }
+    .link-row { margin: 10px 0; }
+    .link-row a { color: var(--accent); }
   </style>
 </head>
 <body>
@@ -93,7 +104,7 @@
         loading: 'Loading...',
         directory: 'Directory',
         log: 'Log',
-        hint: 'Click "Run automatically" or verify manually.',
+        hint: 'Click "Run automatically" or verify when ready.',
         runAuto: 'Run automatically',
         verify: "I've done it — verify",
         skip: 'Skip (I\'ll do it myself)',
@@ -114,13 +125,27 @@
         domainLabel: 'Domain',
         certbotEmail: "Email for Let's Encrypt",
         checkDns: 'Check DNS',
+        envSimple: 'Simple setup (recommended)',
+        envSimpleDesc: 'Auto-generate PostgreSQL & Redis passwords for Docker',
+        envAdvanced: 'Advanced setup',
+        envAdvancedDesc: 'Use external PostgreSQL / Redis with custom credentials',
+        awsTitle: 'AWS S3 (required)',
+        awsGuide: 'Open AWS setup guide',
+        awsProvision: 'Create S3 bucket & IAM user',
+        awsBootstrapKey: 'Bootstrap access key ID',
+        awsBootstrapSecret: 'Bootstrap secret access key',
+        awsRegion: 'Region',
+        awsBucket: 'Bucket name',
+        awsAccessKey: 'App access key ID',
+        awsSecretKey: 'App secret access key',
+        allowedHosts: 'ALLOWED_HOSTS',
       },
       ru: {
         title: 'Rumble Server — установщик',
         loading: 'Загрузка...',
         directory: 'Директория',
         log: 'Лог',
-        hint: 'Нажми «Выполнить автоматически» или проверь вручную.',
+        hint: 'Нажми «Выполнить автоматически» или проверь, когда будешь готов.',
         runAuto: 'Выполнить автоматически',
         verify: 'Я сделал — проверить',
         skip: 'Пропустить (сделаю сам)',
@@ -141,41 +166,59 @@
         domainLabel: 'Домен',
         certbotEmail: 'Email для Let\'s Encrypt',
         checkDns: 'Проверить DNS',
+        envSimple: 'Простая установка (рекомендуется)',
+        envSimpleDesc: 'Автогенерация паролей PostgreSQL и Redis в Docker',
+        envAdvanced: 'Продвинутая установка',
+        envAdvancedDesc: 'Внешние PostgreSQL / Redis со своими данными',
+        awsTitle: 'AWS S3 (обязательно)',
+        awsGuide: 'Открыть инструкцию AWS',
+        awsProvision: 'Создать bucket и IAM-пользователя',
+        awsBootstrapKey: 'Bootstrap access key ID',
+        awsBootstrapSecret: 'Bootstrap secret access key',
+        awsRegion: 'Регион',
+        awsBucket: 'Имя bucket',
+        awsAccessKey: 'App access key ID',
+        awsSecretKey: 'App secret access key',
+        allowedHosts: 'ALLOWED_HOSTS',
       },
     };
 
     const STEPS_I18N = {
       en: {
-        system: { title: 'System check', desc: 'Ubuntu/Debian, root, python3' },
-        ufw: { title: 'Firewall (UFW)', desc: 'Ports 22, 80, 443' },
-        docker: { title: 'Docker', desc: 'Docker Engine + Compose plugin' },
-        ghcr: { title: 'Image access (GHCR)', desc: 'Key from maintainer' },
-        env: { title: '.env configuration', desc: 'Domain, passwords, AWS' },
-        deploy: { title: 'Deploy', desc: 'docker compose pull && up -d' },
-        superuser: { title: 'Django Admin', desc: 'First superuser' },
-        nginx: { title: 'Nginx + HTTPS', desc: "Reverse proxy and Let's Encrypt" },
-        finish: { title: 'Done', desc: 'Installation summary' },
+        system: { title: 'System requirements', desc: 'Ubuntu/Debian, root, Python 3', pending: 'We will verify the OS, root access, and Python 3.' },
+        ufw: { title: 'Firewall (UFW)', desc: 'Open ports 22, 80, 443', pending: 'Configure the firewall: allow SSH, HTTP, and HTTPS.' },
+        docker: { title: 'Docker', desc: 'Engine and Compose plugin', pending: 'Install Docker Engine and the Compose plugin.' },
+        ghcr: { title: 'Container registry (GHCR)', desc: 'Access key from maintainer', pending: 'Log in to GHCR with the access key from the maintainer.' },
+        env: { title: 'Server configuration (.env)', desc: 'Domain, database, Redis, AWS S3', pending: 'Fill in the form below to create and configure the server .env file.' },
+        deploy: { title: 'Deploy application', desc: 'Pull images and start services', pending: 'Pull the container image and start the application.' },
+        superuser: { title: 'Django Admin account', desc: 'First superuser', pending: 'Create the first Django Admin superuser account.' },
+        nginx: { title: 'Nginx and HTTPS', desc: 'Reverse proxy and Let\'s Encrypt', pending: 'Set up Nginx, obtain an HTTPS certificate, and connect your domain.' },
+        finish: { title: 'Installation complete', desc: 'Summary and next steps', pending: 'Review the installation summary.' },
       },
       ru: {
-        system: { title: 'Проверка системы', desc: 'Ubuntu/Debian, root, python3' },
-        ufw: { title: 'Firewall (UFW)', desc: 'Порты 22, 80, 443' },
-        docker: { title: 'Docker', desc: 'Docker Engine + Compose plugin' },
-        ghcr: { title: 'Доступ к образу (GHCR)', desc: 'Ключ от мейнтейнера' },
-        env: { title: 'Конфигурация .env', desc: 'Домен, пароли, AWS' },
-        deploy: { title: 'Деплой', desc: 'docker compose pull && up -d' },
-        superuser: { title: 'Django Admin', desc: 'Первый суперпользователь' },
-        nginx: { title: 'Nginx + HTTPS', desc: "Reverse proxy и Let's Encrypt" },
-        finish: { title: 'Готово', desc: 'Сводка установки' },
+        system: { title: 'Требования к системе', desc: 'Ubuntu/Debian, root, Python 3', pending: 'Проверим ОС, права root и наличие Python 3.' },
+        ufw: { title: 'Firewall (UFW)', desc: 'Порты 22, 80, 443', pending: 'Настроим firewall: откроем SSH, HTTP и HTTPS.' },
+        docker: { title: 'Docker', desc: 'Engine и Compose plugin', pending: 'Установим Docker Engine и Compose plugin.' },
+        ghcr: { title: 'Реестр образов (GHCR)', desc: 'Ключ от мейнтейнера', pending: 'Войдём в GHCR с ключом доступа от мейнтейнера.' },
+        env: { title: 'Создание и заполнение файла конфигурации сервера (.env)', desc: 'Домен, БД, Redis, AWS S3', pending: 'Заполни форму ниже — будет создан и настроен файл .env сервера.' },
+        deploy: { title: 'Деплой приложения', desc: 'Образ и запуск сервисов', pending: 'Скачаем образ и запустим контейнеры приложения.' },
+        superuser: { title: 'Аккаунт Django Admin', desc: 'Первый суперпользователь', pending: 'Создадим первого суперпользователя Django Admin.' },
+        nginx: { title: 'Nginx и HTTPS', desc: 'Reverse proxy и Let\'s Encrypt', pending: 'Настроим Nginx, получим HTTPS-сертификат и привяжем домен.' },
+        finish: { title: 'Установка завершена', desc: 'Сводка и дальнейшие шаги', pending: 'Ознакомься со сводкой по установке.' },
       },
     };
 
     let lang = localStorage.getItem('installer_lang') || 'en';
     const params = new URLSearchParams(location.search);
     const TOKEN = params.get('token') || '';
-    let state = null, currentStepId = null, logOffset = 0, busy = false, lastFormStepId = null;
+    let state = null, currentStepId = null, logOffset = 0, busy = false, lastFormStepId = null, lastActionResult = null;
 
     function t(k) { return (UI[lang] && UI[lang][k]) || UI.en[k] || k; }
-    function stepMeta(id) { return (STEPS_I18N[lang] && STEPS_I18N[lang][id]) || STEPS_I18N.en[id] || { title: id, desc: '' }; }
+    function stepMeta(id) { return (STEPS_I18N[lang] && STEPS_I18N[lang][id]) || STEPS_I18N.en[id] || { title: id, desc: '', pending: '' }; }
+    function pendingMessage(step) {
+      const meta = stepMeta(step.id);
+      return meta.pending || t('hint');
+    }
     function esc(s) { return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
     function setLang(l) {
@@ -235,7 +278,7 @@
         const meta = stepMeta(step.id);
         const div = document.createElement('div');
         div.className = 'step-item' + (step.id === currentStepId ? ' active' : '') + (step.status === 'done' ? ' done' : '') + (step.status === 'error' ? ' error' : '');
-        div.onclick = () => { currentStepId = step.id; lastFormStepId = null; renderStepList(); renderCurrentStep(); };
+        div.onclick = () => { currentStepId = step.id; lastFormStepId = null; lastActionResult = null; renderStepList(); renderCurrentStep(); };
         div.innerHTML = '<div class="step-dot">' + (step.status === 'done' ? '✓' : (idx + 1)) + '</div>' +
           '<div><div class="step-title">' + esc(meta.title) + '</div><div class="step-desc">' + esc(meta.desc) + '</div></div>';
         el.appendChild(div);
@@ -250,15 +293,25 @@
       document.getElementById('step-desc').textContent = meta.desc;
       const statusEl = document.getElementById('step-status');
       statusEl.classList.remove('hidden', 'ok', 'fail', 'info');
-      if (step.message) {
-        statusEl.textContent = step.message;
-        statusEl.classList.add(step.status === 'done' ? 'ok' : 'fail');
+      const recentFail = lastActionResult
+        && lastActionResult.stepId === step.id
+        && !lastActionResult.data.ok
+        && Date.now() - lastActionResult.time < 120000;
+      if (step.status === 'done') {
+        statusEl.textContent = step.message || t('hint');
+        statusEl.classList.add('ok');
+      } else if (step.status === 'error') {
+        statusEl.textContent = step.message || t('error');
+        statusEl.classList.add('fail');
+      } else if (recentFail) {
+        statusEl.textContent = lastActionResult.data.message || t('error');
+        statusEl.classList.add('fail');
       } else {
-        statusEl.textContent = t('hint');
+        statusEl.textContent = pendingMessage(step);
         statusEl.classList.add('info');
       }
       const manualEl = document.getElementById('step-manual');
-      if (step.manual) {
+      if (step.manual && (step.status === 'done' || recentFail)) {
         manualEl.classList.remove('hidden');
         manualEl.textContent = (step.cwd ? '# cwd: ' + step.cwd + '\n\n' : '') + step.manual;
       } else manualEl.classList.add('hidden');
@@ -284,32 +337,89 @@
       }
       if (step.id === 'env') {
         formEl.classList.remove('hidden');
-        formEl.innerHTML = `<div class="form-grid">
-          <label>${t('domain')}<input type="text" id="domain" value="${esc(d.domain || state.domain || '')}" placeholder="api.example.com"></label>
-          <label>ALLOWED_HOSTS<input type="text" id="allowed_hosts" value="${esc(d.allowed_hosts || '')}"></label>
-          <label>DB_PASS<input type="text" id="db_pass" value="${esc(d.db_pass || '')}"></label>
-          <label>REDIS_PASSWORD<input type="text" id="redis_password" value="${esc(d.redis_password || '')}"></label>
-          <label>SECRET_KEY<input type="text" id="secret_key" value="${esc(d.secret_key || '')}"></label></div>
-          <div class="checkbox-row"><input type="checkbox" id="use_external_db" ${d.use_external_db ? 'checked' : ''}>
-          <label for="use_external_db" style="color:var(--text)">${t('externalDb')}</label></div>
-          <div class="form-grid"><label>DB_HOST<input type="text" id="db_host" value="${esc(d.db_host || 'db')}"></label>
-          <label>DB_PORT<input type="text" id="db_port" value="${esc(d.db_port || '5432')}"></label>
-          <label>DB_NAME<input type="text" id="db_name" value="${esc(d.db_name || 'rumbleserver_db')}"></label>
-          <label>DB_USER<input type="text" id="db_user" value="${esc(d.db_user || 'rumbleserver_user')}"></label></div>
-          <div class="checkbox-row"><input type="checkbox" id="use_external_redis" ${d.use_external_redis ? 'checked' : ''}>
-          <label for="use_external_redis" style="color:var(--text)">${t('externalRedis')}</label></div>
-          <div class="form-grid"><label>REDIS_HOST<input type="text" id="redis_host" value="${esc(d.redis_host || 'redis')}"></label>
-          <label>REDIS_PORT<input type="text" id="redis_port" value="${esc(d.redis_port || '6379')}"></label></div>
-          <details style="margin-top:8px;color:var(--muted);font-size:.85rem"><summary>${t('awsOptional')}</summary>
-          <div class="form-grid" style="margin-top:10px">
-          <label>AWS_ACCESS_KEY_ID<input type="text" id="aws_access_key_id" value="${esc(d.aws_access_key_id || '')}"></label>
-          <label>AWS_SECRET_ACCESS_KEY<input type="password" id="aws_secret_access_key" value="${esc(d.aws_secret_access_key || '')}"></label>
-          <label>AWS_STORAGE_BUCKET_NAME<input type="text" id="aws_storage_bucket_name" value="${esc(d.aws_storage_bucket_name || '')}"></label>
-          <label>AWS_S3_REGION_NAME<input type="text" id="aws_s3_region_name" value="${esc(d.aws_s3_region_name || 'eu-north-1')}"></label></div></details>`;
+        const mode = d.env_mode || 'simple';
+        const awsBlock = `
+          <div class="aws-block">
+            <h4>${t('awsTitle')}</h4>
+            <div class="link-row"><a href="#" id="aws-guide-link">${t('awsGuide')} ↗</a></div>
+            <div class="form-grid">
+              <label>${t('awsRegion')}
+                <select id="aws_s3_region_name">
+                  ${['eu-north-1','eu-west-1','eu-central-1','us-east-1','us-west-2'].map(r =>
+                    `<option value="${r}" ${(d.aws_s3_region_name || 'eu-north-1') === r ? 'selected' : ''}>${r}</option>`).join('')}
+                </select>
+              </label>
+              <label>${t('awsBucket')}<input type="text" id="aws_storage_bucket_name" autocomplete="off" value="${esc(d.aws_storage_bucket_name || '')}" placeholder="rumble-myserver-prod"></label>
+            </div>
+            <details style="margin-top:10px;color:var(--muted);font-size:.85rem">
+              <summary>${t('awsProvision')} (bootstrap credentials)</summary>
+              <div class="form-grid" style="margin-top:10px">
+                <label>${t('awsBootstrapKey')}<input type="text" id="aws_bootstrap_access_key_id" autocomplete="off"></label>
+                <label>${t('awsBootstrapSecret')}<input type="text" id="aws_bootstrap_secret_access_key" autocomplete="off"></label>
+              </div>
+              <div class="actions" style="margin:0"><button type="button" class="btn secondary" id="aws-provision-btn">${t('awsProvision')}</button></div>
+            </details>
+            <div class="form-grid" style="margin-top:12px">
+              <label>${t('awsAccessKey')}<input type="text" id="aws_access_key_id" autocomplete="off" value="${esc(d.aws_access_key_id || '')}"></label>
+              <label>${t('awsSecretKey')}<input type="text" id="aws_secret_access_key" autocomplete="off" value="${esc(d.aws_secret_access_key || '')}"></label>
+            </div>
+          </div>`;
+        const advancedBlock = `
+          <div id="env-advanced-fields">
+            <div class="form-grid">
+            <label>DB_PASS<input type="text" id="db_pass" value="${esc(d.db_pass || '')}"></label>
+            <label>REDIS_PASSWORD<input type="text" id="redis_password" value="${esc(d.redis_password || '')}"></label>
+            <label>SECRET_KEY<input type="text" id="secret_key" value="${esc(d.secret_key || '')}"></label>
+            </div>
+            <div class="checkbox-row"><input type="checkbox" id="use_external_db" ${d.use_external_db ? 'checked' : ''}>
+            <label for="use_external_db" style="color:var(--text)">${t('externalDb')}</label></div>
+            <div class="form-grid">
+              <label>DB_HOST<input type="text" id="db_host" value="${esc(d.db_host || 'db')}"></label>
+              <label>DB_PORT<input type="text" id="db_port" value="${esc(d.db_port || '5432')}"></label>
+              <label>DB_NAME<input type="text" id="db_name" value="${esc(d.db_name || 'rumbleserver_db')}"></label>
+              <label>DB_USER<input type="text" id="db_user" value="${esc(d.db_user || 'rumbleserver_user')}"></label>
+            </div>
+            <div class="checkbox-row"><input type="checkbox" id="use_external_redis" ${d.use_external_redis ? 'checked' : ''}>
+            <label for="use_external_redis" style="color:var(--text)">${t('externalRedis')}</label></div>
+            <div class="form-grid">
+              <label>REDIS_HOST<input type="text" id="redis_host" value="${esc(d.redis_host || 'redis')}"></label>
+              <label>REDIS_PORT<input type="text" id="redis_port" value="${esc(d.redis_port || '6379')}"></label>
+            </div>
+          </div>`;
+        formEl.innerHTML = `
+          <div class="mode-switch">
+            <label><input type="radio" name="env_mode" value="simple" ${mode !== 'advanced' ? 'checked' : ''}> ${t('envSimple')}</label>
+            <label><input type="radio" name="env_mode" value="advanced" ${mode === 'advanced' ? 'checked' : ''}> ${t('envAdvanced')}</label>
+          </div>
+          <p class="desc" id="env-mode-desc">${mode === 'advanced' ? t('envAdvancedDesc') : t('envSimpleDesc')}</p>
+          <div class="form-grid">
+            <label>${t('domain')}<input type="text" id="domain" value="${esc(d.domain || state.domain || '')}" placeholder="api.example.com"></label>
+            <label>${t('allowedHosts')}<input type="text" id="allowed_hosts" value="${esc(d.allowed_hosts || '')}"></label>
+          </div>
+          <div id="env-advanced-wrap" class="${mode === 'advanced' ? '' : 'hidden'}">${advancedBlock}</div>
+          <div id="env-status-list" class="status-list"></div>
+          ${awsBlock}`;
+        formEl.querySelectorAll('input[name="env_mode"]').forEach(r => {
+          r.onchange = () => {
+            const adv = envMode() === 'advanced';
+            formEl.querySelector('#env-advanced-wrap').classList.toggle('hidden', !adv);
+            formEl.querySelector('#env-mode-desc').textContent = adv ? t('envAdvancedDesc') : t('envSimpleDesc');
+          };
+        });
+        formEl.querySelector('#aws-guide-link').onclick = e => { e.preventDefault(); openAwsGuide(); };
+        formEl.querySelector('#aws-provision-btn').onclick = () => provisionAws();
         const domainInput = formEl.querySelector('#domain');
         const allowedInput = formEl.querySelector('#allowed_hosts');
-        domainInput.addEventListener('input', () => { if (!allowedInput.dataset.touched) allowedInput.value = domainInput.value; });
+        domainInput.addEventListener('input', () => {
+          if (!allowedInput.dataset.touched) allowedInput.value = domainInput.value;
+          const bucket = formEl.querySelector('#aws_storage_bucket_name');
+          if (bucket && !bucket.dataset.touched) {
+            const slug = domainInput.value.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase().slice(0, 40);
+            if (slug) bucket.value = 'rumble-' + slug;
+          }
+        });
         allowedInput.addEventListener('input', () => { allowedInput.dataset.touched = '1'; });
+        formEl.querySelector('#aws_storage_bucket_name')?.addEventListener('input', e => { e.target.dataset.touched = '1'; });
         return;
       }
       if (step.id === 'superuser') {
@@ -335,19 +445,91 @@
       }
     }
 
+    function envMode() {
+      return document.querySelector('input[name="env_mode"]:checked')?.value || 'simple';
+    }
+
+    function openAwsGuide() {
+      const bucket = document.getElementById('aws_storage_bucket_name')?.value || '';
+      const u = new URL('/aws-guide.html', location.origin);
+      if (TOKEN) u.searchParams.set('token', TOKEN);
+      if (bucket) u.searchParams.set('bucket', bucket);
+      window.open(u.toString(), '_blank');
+    }
+
+    async function provisionAws() {
+      const g = id => document.getElementById(id);
+      const payload = {
+        aws_bootstrap_access_key_id: g('aws_bootstrap_access_key_id')?.value || '',
+        aws_bootstrap_secret_access_key: g('aws_bootstrap_secret_access_key')?.value || '',
+        aws_s3_region_name: g('aws_s3_region_name')?.value || 'eu-north-1',
+        aws_storage_bucket_name: g('aws_storage_bucket_name')?.value || '',
+      };
+      if (!payload.aws_bootstrap_access_key_id || !payload.aws_bootstrap_secret_access_key) {
+        alert(t('error') + ': bootstrap AWS credentials required');
+        return;
+      }
+      if (!payload.aws_storage_bucket_name) {
+        alert(t('error') + ': bucket name required');
+        return;
+      }
+      busy = true;
+      try {
+        const res = await api('/api/aws/provision', { method: 'POST', body: JSON.stringify(payload) });
+        const data = await res.json();
+        if (data.ok) {
+          g('aws_access_key_id').value = data.aws_access_key_id || '';
+          g('aws_secret_access_key').value = data.aws_secret_access_key || '';
+          g('aws_storage_bucket_name').value = data.aws_storage_bucket_name || payload.aws_storage_bucket_name;
+          if (data.aws_s3_region_name) g('aws_s3_region_name').value = data.aws_s3_region_name;
+          showActionResult(data, false);
+        } else {
+          showActionResult(data, false);
+        }
+      } catch (e) { alert(t('error') + ': ' + e.message); }
+      finally { busy = false; renderCurrentStep(); }
+    }
+
+    function renderEnvStatuses(statuses) {
+      const el = document.getElementById('env-status-list');
+      if (!el || !statuses || !statuses.length) return;
+      el.innerHTML = statuses.map(s =>
+        `<div class="status-item ${s.ok ? 'ok' : 'fail'}">${s.ok ? '✓' : '✗'} ${esc(s.label)}</div>`
+      ).join('');
+    }
+
     function collectPayload(stepId) {
       const g = id => document.getElementById(id);
       if (stepId === 'ghcr') return { ghcr_key: g('ghcr_key')?.value || '', ghcr_user: g('ghcr_user')?.value || 'rmbldeploy' };
-      if (stepId === 'env') return {
-        domain: g('domain')?.value || '', allowed_hosts: g('allowed_hosts')?.value || '',
-        db_pass: g('db_pass')?.value || '', redis_password: g('redis_password')?.value || '',
-        secret_key: g('secret_key')?.value || '', use_external_db: g('use_external_db')?.checked || false,
-        use_external_redis: g('use_external_redis')?.checked || false, db_host: g('db_host')?.value || '',
-        db_port: g('db_port')?.value || '', db_name: g('db_name')?.value || '', db_user: g('db_user')?.value || '',
-        redis_host: g('redis_host')?.value || '', redis_port: g('redis_port')?.value || '',
-        aws_access_key_id: g('aws_access_key_id')?.value || '', aws_secret_access_key: g('aws_secret_access_key')?.value || '',
-        aws_storage_bucket_name: g('aws_storage_bucket_name')?.value || '', aws_s3_region_name: g('aws_s3_region_name')?.value || '',
-      };
+      if (stepId === 'env') {
+        const mode = envMode();
+        const base = {
+          env_mode: mode,
+          domain: g('domain')?.value || '',
+          allowed_hosts: g('allowed_hosts')?.value || '',
+          aws_access_key_id: g('aws_access_key_id')?.value || '',
+          aws_secret_access_key: g('aws_secret_access_key')?.value || '',
+          aws_storage_bucket_name: g('aws_storage_bucket_name')?.value || '',
+          aws_s3_region_name: g('aws_s3_region_name')?.value || 'eu-north-1',
+        };
+        if (mode === 'advanced') {
+          return {
+            ...base,
+            db_pass: g('db_pass')?.value || '',
+            redis_password: g('redis_password')?.value || '',
+            secret_key: g('secret_key')?.value || '',
+            use_external_db: g('use_external_db')?.checked || false,
+            use_external_redis: g('use_external_redis')?.checked || false,
+            db_host: g('db_host')?.value || '',
+            db_port: g('db_port')?.value || '',
+            db_name: g('db_name')?.value || '',
+            db_user: g('db_user')?.value || '',
+            redis_host: g('redis_host')?.value || '',
+            redis_port: g('redis_port')?.value || '',
+          };
+        }
+        return base;
+      }
       if (stepId === 'superuser') return { admin_username: g('admin_username')?.value || '', admin_email: g('admin_email')?.value || '', admin_password: g('admin_password')?.value || '' };
       if (stepId === 'nginx') return { certbot_email: g('certbot_email')?.value || '', domain: g('nginx_domain')?.value || '' };
       return {};
@@ -405,10 +587,13 @@
     }
 
     function showActionResult(data, silent) {
+      lastActionResult = { stepId: currentStepId, data, time: Date.now() };
+      if (data.ok) lastActionResult = null;
       const statusEl = document.getElementById('step-status');
       statusEl.classList.remove('hidden', 'ok', 'fail', 'info');
       statusEl.textContent = data.message || (data.ok ? 'OK' : t('error'));
       statusEl.classList.add(data.ok ? 'ok' : 'fail');
+      if (data.data?.statuses) renderEnvStatuses(data.data.statuses);
       const manualEl = document.getElementById('step-manual');
       if (data.manual) {
         manualEl.classList.remove('hidden');
