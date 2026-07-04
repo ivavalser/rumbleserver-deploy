@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import shutil
 import socket
@@ -358,6 +359,14 @@ def _endpoint_for_region(region: str) -> str:
     return f"https://s3.{region}.amazonaws.com"
 
 
+def _env_value(text: str, key: str) -> str:
+    prefix = f"{key}="
+    for line in text.splitlines():
+        if line.startswith(prefix):
+            return line[len(prefix) :].strip()
+    return ""
+
+
 def _aws_configured(text: str) -> bool:
     placeholders = (
         "your_aws_access_key",
@@ -368,15 +377,102 @@ def _aws_configured(text: str) -> bool:
     if any(p in text for p in placeholders):
         return False
     for key in (
-        "AWS_ACCESS_KEY_ID=",
-        "AWS_SECRET_ACCESS_KEY=",
-        "AWS_STORAGE_BUCKET_NAME=",
-        "AWS_S3_REGION_NAME=",
-        "AWS_S3_ENDPOINT_URL=",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_STORAGE_BUCKET_NAME",
+        "AWS_S3_REGION_NAME",
+        "AWS_S3_ENDPOINT_URL",
     ):
-        if key not in text:
+        if not _env_value(text, key):
             return False
     return True
+
+
+def _aws_apply_statuses(ctx: InstallerContext) -> list[dict[str, Any]]:
+    text = ctx.env_path.read_text(encoding="utf-8") if ctx.env_path.exists() else ""
+    bucket = ctx.get("aws_storage_bucket_name") or ""
+    region = ctx.get("aws_s3_region_name") or ""
+    return [
+        {"label": "AWS credentials saved", "ok": bool(ctx.get("aws_access_key_id"))},
+        {"label": f"S3 bucket configured ({bucket})" if bucket else "S3 bucket configured", "ok": bool(bucket)},
+        {"label": f"Region set ({region})" if region else "Region set", "ok": bool(region)},
+        {"label": "Credentials written to .env", "ok": _aws_configured(text)},
+        {"label": "S3 access verified", "ok": bool(ctx.get("aws_verified"))},
+    ]
+
+
+def _default_aws_payload(ctx: InstallerContext) -> dict[str, Any]:
+    domain = ctx.get("domain") or ""
+    region = ctx.get("aws_s3_region_name") or "eu-north-1"
+    slug = re.sub(r"[^a-z0-9]+", "-", domain.lower()).strip("-")[:40]
+    suggested_bucket = ctx.get("aws_storage_bucket_name") or (f"rumble-{slug}" if slug else "")
+    return {
+        "aws_access_key_id": ctx.get("aws_access_key_id") or "",
+        "aws_secret_access_key": ctx.get("aws_secret_access_key") or "",
+        "aws_storage_bucket_name": suggested_bucket,
+        "aws_s3_region_name": region,
+        "aws_s3_endpoint_url": ctx.get("aws_s3_endpoint_url")
+        or _endpoint_for_region(region),
+        "aws_bootstrap_access_key_id": ctx.get("aws_bootstrap_access_key_id") or "",
+        "aws_bootstrap_secret_access_key": ctx.get("aws_bootstrap_secret_access_key") or "",
+    }
+
+
+def _suggested_bucket(domain: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", domain.lower()).strip("-")[:40]
+    return f"rumble-{slug}" if slug else ""
+
+
+def check_aws_access(
+    ctx: InstallerContext,
+    payload: dict[str, Any] | None = None,
+) -> StepResult:
+    data = payload or {}
+    access_key = (
+        data.get("aws_access_key_id") or ctx.get("aws_access_key_id") or ""
+    ).strip()
+    secret = (
+        data.get("aws_secret_access_key") or ctx.get("aws_secret_access_key") or ""
+    ).strip()
+    region = (
+        data.get("aws_s3_region_name") or ctx.get("aws_s3_region_name") or "eu-north-1"
+    ).strip()
+    bucket = (
+        data.get("aws_storage_bucket_name") or ctx.get("aws_storage_bucket_name") or ""
+    ).strip()
+
+    if not access_key or not secret:
+        return _fail("Enter the app AWS access key and secret first.")
+    if not bucket:
+        return _fail("Enter the S3 bucket name first.")
+
+    from aws_setup import verify_s3_access
+
+    try:
+        result = verify_s3_access(
+            access_key_id=access_key,
+            secret_access_key=secret,
+            region=region,
+            bucket=bucket,
+            log=ctx.log,
+        )
+    except Exception as exc:
+        return _fail(str(exc))
+
+    if result["ok"]:
+        ctx.set("aws_verified", True)
+        return StepResult(
+            ok=True,
+            message=result["message"],
+            data={"checks": result["checks"]},
+        )
+    ctx.set("aws_verified", False)
+    return StepResult(
+        ok=False,
+        message=result["message"],
+        manual=result.get("manual", ""),
+        data={"checks": result.get("checks", [])},
+    )
 
 
 def _env_apply_statuses(payload: dict[str, Any], ctx: InstallerContext) -> list[dict[str, Any]]:
@@ -414,20 +510,11 @@ def _env_apply_statuses(payload: dict[str, Any], ctx: InstallerContext) -> list[
                 },
             ]
         )
-    items.append(
-        {
-            "label": "AWS S3 credentials added",
-            "ok": _aws_configured(ctx.env_path.read_text(encoding="utf-8"))
-            if ctx.env_path.exists()
-            else False,
-        }
-    )
     return items
 
 
 def _default_env_payload(ctx: InstallerContext) -> dict[str, Any]:
     domain = ctx.get("domain") or ""
-    region = ctx.get("aws_s3_region_name") or "eu-north-1"
     return {
         "env_mode": ctx.get("env_mode") or "simple",
         "domain": domain,
@@ -443,12 +530,6 @@ def _default_env_payload(ctx: InstallerContext) -> dict[str, Any]:
         "redis_port": ctx.get("redis_port") or "6379",
         "use_external_db": bool(ctx.get("use_external_db")),
         "use_external_redis": bool(ctx.get("use_external_redis")),
-        "aws_access_key_id": ctx.get("aws_access_key_id") or "",
-        "aws_secret_access_key": ctx.get("aws_secret_access_key") or "",
-        "aws_storage_bucket_name": ctx.get("aws_storage_bucket_name") or "",
-        "aws_s3_region_name": ctx.get("aws_s3_region_name") or "eu-north-1",
-        "aws_s3_endpoint_url": ctx.get("aws_s3_endpoint_url")
-        or _endpoint_for_region(region),
     }
 
 
@@ -471,12 +552,12 @@ def _write_env_file(ctx: InstallerContext, payload: dict[str, Any]) -> None:
     redis_url = f"redis://:{redis_password}@{redis_host}:{redis_port}/0"
 
     secret_key = payload.get("secret_key") or _generate_django_secret()
-    region = payload.get("aws_s3_region_name") or "eu-north-1"
-    endpoint = payload.get("aws_s3_endpoint_url") or _endpoint_for_region(region)
+    region = payload.get("aws_s3_region_name") or ctx.get("aws_s3_region_name") or "eu-north-1"
+    endpoint = payload.get("aws_s3_endpoint_url") or ctx.get("aws_s3_endpoint_url") or _endpoint_for_region(region)
 
-    aws_key = (payload.get("aws_access_key_id") or "").strip()
-    aws_secret = (payload.get("aws_secret_access_key") or "").strip()
-    aws_bucket = (payload.get("aws_storage_bucket_name") or "").strip()
+    aws_key = (payload.get("aws_access_key_id") or ctx.get("aws_access_key_id") or "").strip()
+    aws_secret = (payload.get("aws_secret_access_key") or ctx.get("aws_secret_access_key") or "").strip()
+    aws_bucket = (payload.get("aws_storage_bucket_name") or ctx.get("aws_storage_bucket_name") or "").strip()
 
     lines = [
         "# Generated by Rumble Server installer",
@@ -521,8 +602,8 @@ def _write_env_file(ctx: InstallerContext, payload: dict[str, Any]) -> None:
             "redis_port": redis_port,
             "use_external_db": use_external_db,
             "use_external_redis": use_external_redis,
-            "aws_access_key_id": payload.get("aws_access_key_id") or "",
-            "aws_secret_access_key": payload.get("aws_secret_access_key") or "",
+            "aws_access_key_id": aws_key,
+            "aws_secret_access_key": aws_secret,
             "aws_storage_bucket_name": aws_bucket,
             "aws_s3_region_name": region,
             "aws_s3_endpoint_url": endpoint,
@@ -591,11 +672,6 @@ def check_env(ctx: InstallerContext) -> StepResult:
         return _fail(f"The .env file is incomplete — missing: {', '.join(missing)}")
     if "change_this" in text or "your-secret-key" in text:
         return _fail("The .env file still contains placeholder values — replace them.")
-    if not _aws_configured(text):
-        return _fail(
-            "AWS S3 credentials are not set yet.",
-            manual="Fill in AWS credentials or use Create S3 bucket & IAM user in the installer.",
-        )
     defaults = _default_env_payload(ctx)
     return _ok("Server .env file is configured.", defaults=defaults)
 
@@ -615,10 +691,6 @@ def apply_env(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
         if merged.get("use_external_redis") and not merged.get("redis_host"):
             return _fail("Set REDIS_HOST for external Redis.")
 
-    if not (merged.get("aws_access_key_id") and merged.get("aws_secret_access_key")):
-        return _fail("AWS access key and secret are required.")
-    if not merged.get("aws_storage_bucket_name"):
-        return _fail("AWS bucket name is required.")
     if not (merged.get("domain") or "").strip():
         return _fail("Enter the server domain name.")
 
@@ -637,6 +709,76 @@ def apply_env(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
             data={"defaults": _default_env_payload(ctx), "statuses": statuses},
         )
     return result
+
+
+def check_aws(ctx: InstallerContext) -> StepResult:
+    if not ctx.env_path.exists():
+        return _fail("Complete the .env step first.")
+    text = ctx.env_path.read_text(encoding="utf-8")
+    if not _aws_configured(text):
+        return _fail(
+            "AWS S3 is not configured yet.",
+            manual="Fill in bucket and app credentials, or use automatic provisioning.",
+        )
+    if not ctx.get("aws_verified"):
+        return _fail(
+            'S3 access has not been verified yet — click "Check S3 access".',
+        )
+    return _ok("AWS S3 is configured and verified.", defaults=_default_aws_payload(ctx))
+
+
+def apply_aws(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
+    if not ctx.env_path.exists():
+        return _fail("Complete the .env step first.")
+
+    merged = _default_aws_payload(ctx)
+    merged.update(payload)
+    bootstrap_key = (payload.get("aws_bootstrap_access_key_id") or "").strip()
+    bootstrap_secret = (payload.get("aws_bootstrap_secret_access_key") or "").strip()
+    if bootstrap_key:
+        ctx.set("aws_bootstrap_access_key_id", bootstrap_key)
+    if bootstrap_secret:
+        ctx.set("aws_bootstrap_secret_access_key", bootstrap_secret)
+
+    if not (merged.get("aws_access_key_id") and merged.get("aws_secret_access_key")):
+        return _fail("AWS access key and secret are required.")
+    if not merged.get("aws_storage_bucket_name"):
+        return _fail("AWS bucket name is required.")
+
+    env_payload = _default_env_payload(ctx)
+    env_payload.update(
+        {
+            "aws_access_key_id": merged["aws_access_key_id"],
+            "aws_secret_access_key": merged["aws_secret_access_key"],
+            "aws_storage_bucket_name": merged["aws_storage_bucket_name"],
+            "aws_s3_region_name": merged.get("aws_s3_region_name") or "eu-north-1",
+            "aws_s3_endpoint_url": merged.get("aws_s3_endpoint_url")
+            or _endpoint_for_region(merged.get("aws_s3_region_name") or "eu-north-1"),
+        }
+    )
+    _write_env_file(ctx, env_payload)
+
+    verify = check_aws_access(ctx, merged)
+    statuses = _aws_apply_statuses(ctx)
+    data: dict[str, Any] = {
+        "defaults": _default_aws_payload(ctx),
+        "statuses": statuses,
+    }
+    if verify.data.get("checks"):
+        data["checks"] = verify.data["checks"]
+
+    if verify.ok:
+        return StepResult(
+            ok=True,
+            message="AWS configuration saved and verified.",
+            data=data,
+        )
+    return StepResult(
+        ok=False,
+        message=verify.message,
+        manual=verify.manual,
+        data=data,
+    )
 
 
 def check_deploy(ctx: InstallerContext) -> StepResult:
@@ -948,11 +1090,20 @@ STEPS: list[StepDef] = [
     StepDef(
         id="env",
         title="Server configuration (.env)",
-        description="Domain, DNS, database, Redis, AWS S3",
+        description="Domain, DNS, database, Redis",
         check=check_env,
         apply=apply_env,
         needs_form=True,
-        skip_manual="Create .env from env.example with ALLOWED_HOSTS, DB/Redis, and AWS S3 credentials.",
+        skip_manual="Create .env with ALLOWED_HOSTS, DB/Redis credentials, and domain.",
+    ),
+    StepDef(
+        id="aws",
+        title="AWS S3 storage",
+        description="Bucket, IAM user, file uploads",
+        check=check_aws,
+        apply=apply_aws,
+        needs_form=True,
+        skip_manual="Configure AWS S3 in .env: bucket, region, IAM access keys.",
     ),
     StepDef(
         id="deploy",

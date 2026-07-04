@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import secrets
 import subprocess
 import tempfile
 from pathlib import Path
@@ -200,3 +201,148 @@ def provision_s3(
         }
     finally:
         Path(policy_file).unlink(missing_ok=True)
+
+
+def verify_s3_access(
+    *,
+    access_key_id: str,
+    secret_access_key: str,
+    region: str,
+    bucket: str,
+    log: Callable[[str], None],
+) -> dict[str, Any]:
+    """Verify app IAM user can use the bucket (list / put / get / delete)."""
+    bucket = _sanitize_bucket_name(bucket)
+    if not access_key_id or not secret_access_key:
+        raise ValueError("AWS access key and secret are required.")
+    if not bucket:
+        raise ValueError("Bucket name is required.")
+
+    ensure_aws_cli(log)
+
+    env = {
+        **dict(os.environ),
+        "AWS_ACCESS_KEY_ID": access_key_id,
+        "AWS_SECRET_ACCESS_KEY": secret_access_key,
+        "AWS_DEFAULT_REGION": region,
+    }
+
+    checks: list[dict[str, Any]] = []
+
+    def add(label: str, ok: bool) -> None:
+        checks.append({"label": label, "ok": ok})
+
+    try:
+        identity = json.loads(
+            _run_aws(["sts", "get-caller-identity"], env=env, log=log).stdout
+        )
+        add(f"Credentials valid (account {identity.get('Account', '?')})", True)
+    except RuntimeError as exc:
+        add("Credentials valid", False)
+        return {
+            "ok": False,
+            "message": "AWS credentials are invalid or expired.",
+            "checks": checks,
+            "manual": str(exc),
+        }
+
+    try:
+        _run_aws(["s3api", "head-bucket", "--bucket", bucket], env=env, log=log)
+        add(f"Bucket '{bucket}' exists and is reachable", True)
+    except RuntimeError:
+        add(f"Bucket '{bucket}' exists and is reachable", False)
+        return {
+            "ok": False,
+            "message": f"Cannot access bucket '{bucket}'.",
+            "checks": checks,
+            "manual": "Check bucket name, region, and IAM policy.",
+        }
+
+    try:
+        _run_aws(
+            ["s3api", "list-objects-v2", "--bucket", bucket, "--max-items", "1"],
+            env=env,
+            log=log,
+        )
+        add("s3:ListBucket", True)
+    except RuntimeError:
+        add("s3:ListBucket", False)
+        return {
+            "ok": False,
+            "message": "Missing s3:ListBucket permission.",
+            "checks": checks,
+        }
+
+    test_key = f".installer-test-{secrets.token_hex(8)}"
+    body_file = None
+    try:
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as tmp:
+            tmp.write("rumbleserver-installer-access-test")
+            body_file = tmp.name
+
+        _run_aws(
+            [
+                "s3api",
+                "put-object",
+                "--bucket",
+                bucket,
+                "--key",
+                test_key,
+                "--body",
+                body_file,
+            ],
+            env=env,
+            log=log,
+        )
+        add("s3:PutObject", True)
+
+        _run_aws(
+            [
+                "s3api",
+                "get-object",
+                "--bucket",
+                bucket,
+                "--key",
+                test_key,
+                "/tmp/rumble-installer-get-test",
+            ],
+            env=env,
+            log=log,
+        )
+        add("s3:GetObject", True)
+
+        _run_aws(
+            ["s3api", "delete-object", "--bucket", bucket, "--key", test_key],
+            env=env,
+            log=log,
+        )
+        add("s3:DeleteObject", True)
+    except RuntimeError as exc:
+        if not any(c["label"] == "s3:PutObject" for c in checks):
+            add("s3:PutObject", False)
+        elif not any(c["label"] == "s3:GetObject" for c in checks):
+            add("s3:GetObject", False)
+        else:
+            add("s3:DeleteObject", False)
+        _run_aws(
+            ["s3api", "delete-object", "--bucket", bucket, "--key", test_key],
+            env=env,
+            log=log,
+            check=False,
+        )
+        return {
+            "ok": False,
+            "message": "Missing object read/write permissions on the bucket.",
+            "checks": checks,
+            "manual": str(exc),
+        }
+    finally:
+        if body_file:
+            Path(body_file).unlink(missing_ok=True)
+        Path("/tmp/rumble-installer-get-test").unlink(missing_ok=True)
+
+    return {
+        "ok": True,
+        "message": f"AWS S3 access verified for bucket '{bucket}'.",
+        "checks": checks,
+    }

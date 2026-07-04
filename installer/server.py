@@ -23,7 +23,9 @@ from steps import (  # noqa: E402
     STEPS,
     InstallerContext,
     StepResult,
+    _default_aws_payload,
     _default_env_payload,
+    check_aws_access,
     check_dns,
     dns_setup_hint,
     get_server_public_ip,
@@ -134,6 +136,7 @@ class InstallerHandler(BaseHTTPRequestHandler):
                         "current_step": current["id"],
                         "install_dir": str(INSTALL_DIR),
                         "defaults": defaults,
+                        "aws_defaults": _default_aws_payload(self.ctx),
                         "domain": domain,
                         "public_ip": public_ip,
                         "dns_hint": dns_setup_hint(domain, public_ip or None),
@@ -188,6 +191,22 @@ class InstallerHandler(BaseHTTPRequestHandler):
             if not (auth.startswith("Bearer ") and auth[7:] == TOKEN):
                 self._json_response(HTTPStatus.UNAUTHORIZED, {"error": "invalid token"})
                 return
+
+        if path == "/api/step/aws/access-check":
+            if not self._require_auth():
+                return
+            payload = self._read_json()
+            result = check_aws_access(self.ctx, payload)
+            self._json_response(
+                HTTPStatus.OK,
+                {
+                    "ok": result.ok,
+                    "message": result.message,
+                    "manual": result.manual,
+                    "data": result.data,
+                },
+            )
+            return
 
         if path.startswith("/api/step/"):
             parts = path.strip("/").split("/")

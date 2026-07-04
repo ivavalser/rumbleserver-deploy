@@ -79,9 +79,9 @@
     .dns-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
     .dns-table td:first-child { color: var(--muted); width: 72px; white-space: nowrap; }
     .dns-table code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; }
-    #env-dns-status { font-size: 0.85rem; margin-top: 4px; }
-    #env-dns-status.ok { color: var(--ok); }
-    #env-dns-status.fail { color: var(--err); }
+    #env-dns-status.ok, #aws-access-status.ok { color: var(--ok); }
+    #env-dns-status.fail, #aws-access-status.fail { color: var(--err); }
+    #aws-access-status, #env-dns-status { font-size: 0.85rem; margin-top: 4px; }
     .link-row { margin: 10px 0; }
     .link-row a { color: var(--accent); }
   </style>
@@ -146,7 +146,12 @@
         envSectionMode: 'Setup mode',
         envSectionDomain: 'Domain and DNS',
         envSectionDatabase: 'Database and Redis',
-        envSectionAws: 'File storage (AWS S3)',
+        awsStepHelp: 'Rumble stores uploaded files in a private S3 bucket. Create an IAM user for the app, or use automatic setup with bootstrap credentials.',
+        awsBootstrapHelp: 'Bootstrap credentials are from a separate IAM user with permission to create S3 buckets and IAM users. See the setup guide — do not put bootstrap keys into .env.',
+        awsSectionAuto: 'Automatic setup',
+        awsSectionBucket: 'Bucket and region',
+        awsSectionApp: 'App credentials (for .env)',
+        checkAwsAccess: 'Check S3 access',
         serverIp: 'This server IP',
         serverIpUnknown: 'Could not detect automatically — check your VPS control panel',
         dnsType: 'Type',
@@ -204,7 +209,12 @@
         envSectionMode: 'Режим установки',
         envSectionDomain: 'Домен и DNS',
         envSectionDatabase: 'База данных и Redis',
-        envSectionAws: 'Файлы (AWS S3)',
+        awsStepHelp: 'Rumble хранит файлы в приватном S3 bucket. Создай IAM-пользователя для приложения или используй автоматическую настройку с bootstrap-ключами.',
+        awsBootstrapHelp: 'Bootstrap-ключи — от отдельного IAM-пользователя с правами создавать S3 bucket и IAM users. Смотри инструкцию — bootstrap-ключи не клади в .env.',
+        awsSectionAuto: 'Автоматическая настройка',
+        awsSectionBucket: 'Bucket и регион',
+        awsSectionApp: 'Ключи приложения (для .env)',
+        checkAwsAccess: 'Проверить доступ к S3',
         serverIp: 'IP этого сервера',
         serverIpUnknown: 'Не удалось определить автоматически — смотри панель VPS',
         dnsType: 'Тип',
@@ -242,7 +252,8 @@
         ufw: { title: 'Firewall (UFW)', desc: 'Open ports 22, 80, 443', pending: 'Configure the firewall: allow SSH, HTTP, and HTTPS.' },
         docker: { title: 'Docker', desc: 'Engine and Compose plugin', pending: 'Install Docker Engine and the Compose plugin.' },
         ghcr: { title: 'Container registry (GHCR)', desc: 'Access key from maintainer', pending: 'Log in to GHCR with the access key from the maintainer.' },
-        env: { title: 'Server configuration (.env)', desc: 'Domain, database, Redis, AWS S3', pending: 'Specify the server domain, set up DNS (see below), then fill in AWS credentials.' },
+        env: { title: 'Server configuration (.env)', desc: 'Domain, DNS, database, Redis', pending: 'Specify the server domain, set up DNS (see below), then save configuration.' },
+        aws: { title: 'AWS S3 storage', desc: 'Bucket, IAM user, file uploads', pending: 'Configure S3 for file storage — create a bucket and IAM user, or use automatic setup.' },
         deploy: { title: 'Deploy application', desc: 'Pull images and start services', pending: 'Pull the container image and start the application.' },
         superuser: { title: 'Django Admin account', desc: 'First superuser', pending: 'Create the first Django Admin superuser account.' },
         nginx: { title: 'Nginx and HTTPS', desc: 'Reverse proxy and Let\'s Encrypt', pending: 'Set up Nginx, obtain an HTTPS certificate, and connect your domain.' },
@@ -253,7 +264,8 @@
         ufw: { title: 'Firewall (UFW)', desc: 'Порты 22, 80, 443', pending: 'Настроим firewall: откроем SSH, HTTP и HTTPS.' },
         docker: { title: 'Docker', desc: 'Engine и Compose plugin', pending: 'Установим Docker Engine и Compose plugin.' },
         ghcr: { title: 'Реестр образов (GHCR)', desc: 'Ключ от мейнтейнера', pending: 'Войдём в GHCR с ключом доступа от мейнтейнера.' },
-        env: { title: 'Создание и заполнение файла конфигурации сервера (.env)', desc: 'Домен, БД, Redis, AWS S3', pending: 'Укажи домен сервера, настрой DNS (инструкция ниже), затем заполни AWS.' },
+        env: { title: 'Создание и заполнение файла конфигурации сервера (.env)', desc: 'Домен, DNS, БД, Redis', pending: 'Укажи домен, настрой DNS (ниже), сохрани конфигурацию.' },
+        aws: { title: 'AWS S3 — хранение файлов', desc: 'Bucket, IAM, загрузки', pending: 'Настрой S3 — bucket и IAM-пользователь, или автоматическая настройка.' },
         deploy: { title: 'Деплой приложения', desc: 'Образ и запуск сервисов', pending: 'Скачаем образ и запустим контейнеры приложения.' },
         superuser: { title: 'Аккаунт Django Admin', desc: 'Первый суперпользователь', pending: 'Создадим первого суперпользователя Django Admin.' },
         nginx: { title: 'Nginx и HTTPS', desc: 'Reverse proxy и Let\'s Encrypt', pending: 'Настроим Nginx, получим HTTPS-сертификат и привяжем домен.' },
@@ -312,6 +324,40 @@
       el.textContent = data.message || '';
     }
     async function checkEnvDns() {
+      const domain = document.getElementById('domain')?.value?.trim() || '';
+      if (!domain) { alert(t('domainRequired')); return; }
+      try {
+        const data = await (await api('/api/step/env/dns-check?domain=' + encodeURIComponent(domain))).json();
+        renderEnvDnsStatus(data);
+      } catch (e) { alert(t('error') + ': ' + e.message); }
+    }
+
+    async function checkAwsAccess() {
+      try {
+        const data = await (await api('/api/step/aws/access-check', { method: 'POST', body: JSON.stringify(collectPayload('aws')) })).json();
+        renderAwsChecks(data.data?.checks);
+        const el = document.getElementById('aws-access-status');
+        if (el) { el.className = data.ok ? 'ok' : 'fail'; el.textContent = data.message || ''; }
+      } catch (e) { alert(t('error') + ': ' + e.message); }
+    }
+
+    function renderAwsChecks(checks) {
+      const el = document.getElementById('aws-access-checks');
+      if (!el) return;
+      if (!checks || !checks.length) { el.innerHTML = ''; return; }
+      el.innerHTML = checks.map(s =>
+        `<div class="status-item ${s.ok ? 'ok' : 'fail'}">${s.ok ? '✓' : '✗'} ${esc(s.label)}</div>`
+      ).join('');
+    }
+
+    function renderAwsStatuses(statuses) {
+      const el = document.getElementById('aws-status-list');
+      if (!el || !statuses || !statuses.length) return;
+      el.innerHTML = statuses.map(s =>
+        `<div class="status-item ${s.ok ? 'ok' : 'fail'}">${s.ok ? '✓' : '✗'} ${esc(s.label)}</div>`
+      ).join('');
+    }
+
       const domain = document.getElementById('domain')?.value?.trim() || '';
       if (!domain) { alert(t('domainRequired')); return; }
       try {
@@ -438,31 +484,6 @@
       if (step.id === 'env') {
         formEl.classList.remove('hidden');
         const mode = d.env_mode || 'simple';
-        const awsBlock = `
-          <div class="aws-block">
-            <div class="form-grid">
-              <label>${t('awsRegion')}
-                <select id="aws_s3_region_name">
-                  ${['eu-north-1','eu-west-1','eu-central-1','us-east-1','us-west-2'].map(r =>
-                    `<option value="${r}" ${(d.aws_s3_region_name || 'eu-north-1') === r ? 'selected' : ''}>${r}</option>`).join('')}
-                </select>
-              </label>
-              <label>${t('awsBucket')}<input type="text" id="aws_storage_bucket_name" autocomplete="off" value="${esc(d.aws_storage_bucket_name || '')}" placeholder="rumble-myserver-prod"></label>
-            </div>
-            <details class="env-inner" style="margin-top:12px">
-              <summary style="cursor:pointer;color:var(--text);font-size:.88rem;font-weight:600">${t('awsProvision')} (bootstrap credentials)</summary>
-              <div class="form-grid" style="margin-top:10px">
-                <label>${t('awsBootstrapKey')}<input type="text" id="aws_bootstrap_access_key_id" autocomplete="off"></label>
-                <label>${t('awsBootstrapSecret')}<input type="text" id="aws_bootstrap_secret_access_key" autocomplete="off"></label>
-              </div>
-              <div class="actions" style="margin:0"><button type="button" class="btn secondary" id="aws-provision-btn">${t('awsProvision')}</button></div>
-            </details>
-            <div class="form-grid" style="margin-top:12px">
-              <label>${t('awsAccessKey')}<input type="text" id="aws_access_key_id" autocomplete="off" value="${esc(d.aws_access_key_id || '')}"></label>
-              <label>${t('awsSecretKey')}<input type="text" id="aws_secret_access_key" autocomplete="off" value="${esc(d.aws_secret_access_key || '')}"></label>
-            </div>
-            <div class="link-row"><a href="#" id="aws-guide-link">${t('awsGuide')} ↗</a></div>
-          </div>`;
         const advancedBlock = `
           <div id="env-advanced-fields">
             <div class="form-grid">
@@ -519,12 +540,6 @@
               ${advancedBlock}
             </section>
 
-            <section class="env-section">
-              <h3 class="env-section-title">${t('envSectionAws')}</h3>
-              <p class="env-section-lead">${t('awsTitle')}</p>
-              ${awsBlock}
-            </section>
-
             <div id="env-status-list" class="status-list"></div>
           </div>`;
         formEl.querySelectorAll('input[name="env_mode"]').forEach(r => {
@@ -534,23 +549,73 @@
             formEl.querySelector('#env-mode-desc').textContent = adv ? t('envAdvancedDesc') : t('envSimpleDesc');
           };
         });
-        formEl.querySelector('#aws-guide-link').onclick = e => { e.preventDefault(); openAwsGuide(); };
-        formEl.querySelector('#aws-provision-btn').onclick = () => provisionAws();
         const domainInput = formEl.querySelector('#domain');
         const allowedInput = formEl.querySelector('#allowed_hosts');
         renderEnvDnsHint(domainInput.value);
         domainInput.addEventListener('input', () => {
           if (!allowedInput.dataset.touched) allowedInput.value = domainInput.value;
           renderEnvDnsHint(domainInput.value);
-          const bucket = formEl.querySelector('#aws_storage_bucket_name');
-          if (bucket && !bucket.dataset.touched) {
-            const slug = domainInput.value.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase().slice(0, 40);
-            if (slug) bucket.value = 'rumble-' + slug;
-          }
         });
         allowedInput.addEventListener('input', () => { allowedInput.dataset.touched = '1'; });
         formEl.querySelector('#env-dns-check-btn').onclick = () => checkEnvDns();
-        formEl.querySelector('#aws_storage_bucket_name')?.addEventListener('input', e => { e.target.dataset.touched = '1'; });
+        return;
+      }
+      if (step.id === 'aws') {
+        formEl.classList.remove('hidden');
+        const a = state.aws_defaults || {};
+        formEl.innerHTML = `
+          <div class="env-form">
+            <section class="env-section">
+              <h3 class="env-section-title">${t('awsTitle')}</h3>
+              <p class="env-section-lead">${t('awsStepHelp')}</p>
+              <div class="link-row"><a href="#" id="aws-guide-link">${t('awsGuide')} ↗</a></div>
+            </section>
+
+            <section class="env-section">
+              <h3 class="env-section-title">${t('awsSectionAuto')}</h3>
+              <p class="env-section-lead">${t('awsBootstrapHelp')}</p>
+              <div class="form-grid">
+                <label>${t('awsBootstrapKey')}<input type="text" id="aws_bootstrap_access_key_id" autocomplete="off" value="${esc(a.aws_bootstrap_access_key_id || '')}"></label>
+                <label>${t('awsBootstrapSecret')}<input type="text" id="aws_bootstrap_secret_access_key" autocomplete="off" value="${esc(a.aws_bootstrap_secret_access_key || '')}"></label>
+              </div>
+              <div class="actions" style="margin:12px 0 0">
+                <button type="button" class="btn secondary" id="aws-provision-btn">${t('awsProvision')}</button>
+              </div>
+            </section>
+
+            <section class="env-section">
+              <h3 class="env-section-title">${t('awsSectionBucket')}</h3>
+              <div class="form-grid">
+                <label>${t('awsRegion')}
+                  <select id="aws_s3_region_name">
+                    ${['eu-north-1','eu-west-1','eu-central-1','us-east-1','us-west-2'].map(r =>
+                      `<option value="${r}" ${(a.aws_s3_region_name || 'eu-north-1') === r ? 'selected' : ''}>${r}</option>`).join('')}
+                  </select>
+                </label>
+                <label>${t('awsBucket')}<input type="text" id="aws_storage_bucket_name" autocomplete="off" value="${esc(a.aws_storage_bucket_name || '')}" placeholder="rumble-myserver-prod"></label>
+              </div>
+            </section>
+
+            <section class="env-section">
+              <h3 class="env-section-title">${t('awsSectionApp')}</h3>
+              <div class="form-grid">
+                <label>${t('awsAccessKey')}<input type="text" id="aws_access_key_id" autocomplete="off" value="${esc(a.aws_access_key_id || '')}"></label>
+                <label>${t('awsSecretKey')}<input type="text" id="aws_secret_access_key" autocomplete="off" value="${esc(a.aws_secret_access_key || '')}"></label>
+              </div>
+              <div class="env-inner" style="margin-top:12px">
+                <div class="actions" style="margin:0">
+                  <button type="button" class="btn secondary" id="aws-access-check-btn">${t('checkAwsAccess')}</button>
+                </div>
+                <div id="aws-access-status"></div>
+                <div id="aws-access-checks" class="status-list"></div>
+              </div>
+            </section>
+
+            <div id="aws-status-list" class="status-list"></div>
+          </div>`;
+        formEl.querySelector('#aws-guide-link').onclick = e => { e.preventDefault(); openAwsGuide(); };
+        formEl.querySelector('#aws-provision-btn').onclick = () => provisionAws();
+        formEl.querySelector('#aws-access-check-btn').onclick = () => checkAwsAccess();
         return;
       }
       if (step.id === 'superuser') {
@@ -614,6 +679,7 @@
           g('aws_storage_bucket_name').value = data.aws_storage_bucket_name || payload.aws_storage_bucket_name;
           if (data.aws_s3_region_name) g('aws_s3_region_name').value = data.aws_s3_region_name;
           showActionResult(data, false);
+          await checkAwsAccess();
         } else {
           showActionResult(data, false);
         }
@@ -638,10 +704,6 @@
           env_mode: mode,
           domain: g('domain')?.value || '',
           allowed_hosts: g('allowed_hosts')?.value || '',
-          aws_access_key_id: g('aws_access_key_id')?.value || '',
-          aws_secret_access_key: g('aws_secret_access_key')?.value || '',
-          aws_storage_bucket_name: g('aws_storage_bucket_name')?.value || '',
-          aws_s3_region_name: g('aws_s3_region_name')?.value || 'eu-north-1',
         };
         if (mode === 'advanced') {
           return {
@@ -660,6 +722,16 @@
           };
         }
         return base;
+      }
+      if (stepId === 'aws') {
+        return {
+          aws_bootstrap_access_key_id: g('aws_bootstrap_access_key_id')?.value || '',
+          aws_bootstrap_secret_access_key: g('aws_bootstrap_secret_access_key')?.value || '',
+          aws_access_key_id: g('aws_access_key_id')?.value || '',
+          aws_secret_access_key: g('aws_secret_access_key')?.value || '',
+          aws_storage_bucket_name: g('aws_storage_bucket_name')?.value || '',
+          aws_s3_region_name: g('aws_s3_region_name')?.value || 'eu-north-1',
+        };
       }
       if (stepId === 'superuser') return { admin_username: g('admin_username')?.value || '', admin_email: g('admin_email')?.value || '', admin_password: g('admin_password')?.value || '' };
       if (stepId === 'nginx') return { certbot_email: g('certbot_email')?.value || '', domain: g('nginx_domain')?.value || '' };
@@ -731,7 +803,11 @@
         statusEl.textContent = data.message || (data.ok ? 'OK' : t('error'));
         statusEl.classList.add(data.ok ? 'ok' : 'fail');
       }
-      if (data.data?.statuses) renderEnvStatuses(data.data.statuses);
+      if (data.data?.statuses) {
+        if (currentStepId === 'aws') renderAwsStatuses(data.data.statuses);
+        else renderEnvStatuses(data.data.statuses);
+      }
+      if (data.data?.checks) renderAwsChecks(data.data.checks);
       const manualEl = document.getElementById('step-manual');
       if (data.manual) {
         manualEl.classList.remove('hidden');
