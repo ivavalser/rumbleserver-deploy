@@ -25,16 +25,76 @@ def _sanitize_bucket_name(name: str) -> str:
     return name[:63]
 
 
-def ensure_aws_cli(log: Callable[[str], None]) -> str:
-    """Return path to aws binary, installing awscli via apt/pip if needed."""
+_AWS_BIN_CANDIDATES = (
+    "/usr/local/bin/aws",
+    "/usr/bin/aws",
+    "/usr/local/aws-cli/v2/current/bin/aws",
+)
+
+
+def _extend_installer_path() -> None:
+    extra = (
+        "/usr/local/bin",
+        "/usr/local/aws-cli/v2/current/bin",
+        str(Path.home() / ".local/bin"),
+    )
+    current = os.environ.get("PATH", "")
+    prefix = os.pathsep.join(p for p in extra if p not in current.split(os.pathsep))
+    if prefix:
+        os.environ["PATH"] = prefix + os.pathsep + current
+
+
+def _locate_aws_bin() -> str | None:
+    _extend_installer_path()
     path = shutil.which("aws")
     if path:
         return path
+    for candidate in _AWS_BIN_CANDIDATES:
+        if Path(candidate).is_file():
+            return candidate
+    local = Path.home() / ".local/bin/aws"
+    if local.is_file():
+        return str(local)
+    return None
 
-    log("AWS CLI not found — installing awscli...")
-    subprocess.run(["apt-get", "update", "-qq"], check=True)
+
+def _install_aws_cli_v2(log: Callable[[str], None]) -> None:
+    import platform
+
+    machine = platform.machine().lower()
+    arch = "aarch64" if machine in ("aarch64", "arm64") else "x86_64"
+    zip_path = Path("/tmp/awscliv2.zip")
+    log(f"Installing AWS CLI v2 ({arch}) from aws.amazon.com...")
+    subprocess.run(
+        ["apt-get", "install", "-y", "unzip", "curl", "ca-certificates"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        [
+            "curl",
+            "-fsSL",
+            f"https://awscli.amazonaws.com/awscli-exe-linux-{arch}.zip",
+            "-o",
+            str(zip_path),
+        ],
+        check=True,
+    )
+    subprocess.run(["unzip", "-oq", str(zip_path), "-d", "/tmp"], check=True)
+    subprocess.run(["/tmp/aws/install", "--update"], check=True)
+
+
+def ensure_aws_cli(log: Callable[[str], None]) -> str:
+    """Return path to aws binary, installing awscli via apt/pip/AWS v2 if needed."""
+    path = _locate_aws_bin()
+    if path:
+        return path
+
+    log("AWS CLI not found — installing awscli (apt)...")
+    subprocess.run(["apt-get", "update", "-qq"], check=False)
     apt = subprocess.run(
-        ["apt-get", "install", "-y", "awscli"],
+        ["apt-get", "install", "-y", "awscli", "unzip", "curl", "ca-certificates"],
         capture_output=True,
         text=True,
     )
@@ -47,34 +107,41 @@ def ensure_aws_cli(log: Callable[[str], None]) -> str:
             if line.strip():
                 log(line)
 
-    path = shutil.which("aws")
+    path = _locate_aws_bin()
     if path:
         log(f"AWS CLI installed: {path}")
         return path
 
     log("apt awscli missing — trying pip install awscli...")
     subprocess.run(["apt-get", "install", "-y", "python3-pip"], check=False)
-    pip = subprocess.run(
+    for pip_args in (
         [sys.executable, "-m", "pip", "install", "awscli"],
-        capture_output=True,
-        text=True,
-    )
-    if pip.returncode != 0:
-        pip = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "awscli", "--break-system-packages"],
-            capture_output=True,
-            text=True,
-        )
-    if pip.stderr:
-        for line in pip.stderr.strip().split("\n"):
-            if line.strip():
-                log(line)
+        [sys.executable, "-m", "pip", "install", "awscli", "--break-system-packages"],
+    ):
+        pip = subprocess.run(pip_args, capture_output=True, text=True)
+        if pip.stdout:
+            for line in pip.stdout.strip().split("\n"):
+                if line.strip():
+                    log(line)
+        if pip.stderr:
+            for line in pip.stderr.strip().split("\n"):
+                if line.strip():
+                    log(line)
+        path = _locate_aws_bin()
+        if path:
+            log(f"AWS CLI installed via pip: {path}")
+            return path
 
-    path = shutil.which("aws")
+    try:
+        _install_aws_cli_v2(log)
+    except subprocess.CalledProcessError as exc:
+        log(f"AWS CLI v2 install failed: {exc}")
+
+    path = _locate_aws_bin()
     if not path:
         raise RuntimeError(
             "AWS CLI (aws) is not installed and automatic install failed. "
-            "On the server run: apt-get update && apt-get install -y awscli"
+            "SSH to the server and run: apt-get update && apt-get install -y awscli unzip curl"
         )
     log(f"AWS CLI installed: {path}")
     return path
@@ -91,7 +158,13 @@ def _run_aws(
     bin_path = aws_bin or ensure_aws_cli(log)
     cmd = [bin_path, *args, "--output", "json"]
     log("$ aws " + " ".join(args))
-    proc = subprocess.run(cmd, env=env, capture_output=True, text=True)
+    try:
+        proc = subprocess.run(cmd, env=env, capture_output=True, text=True)
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            f"AWS CLI binary not found at {bin_path!r}. "
+            "Restart the installer (kill PID + curl installer.sh again) so it can install awscli."
+        ) from exc
     if proc.stdout:
         for line in proc.stdout.strip().split("\n"):
             if line.strip():
@@ -187,6 +260,7 @@ def provision_s3(
         ],
         env=env,
         log=log,
+        aws_bin=aws_bin,
     )
 
     policy_name = f"RumbleServerS3-{bucket}"[:128]
@@ -210,17 +284,18 @@ def provision_s3(
                 ],
                 env=env,
                 log=log,
+                aws_bin=aws_bin,
             )
             policy_arn = json.loads(create_policy.stdout)["Policy"]["Arn"]
         except RuntimeError:
             account = json.loads(
-                _run_aws(["sts", "get-caller-identity"], env=env, log=log).stdout
+                _run_aws(["sts", "get-caller-identity"], env=env, log=log, aws_bin=aws_bin).stdout
             )["Account"]
             policy_arn = f"arn:aws:iam::{account}:policy/{policy_name}"
             log(f"Using existing policy ARN: {policy_arn}")
 
         try:
-            _run_aws(["iam", "create-user", "--user-name", user_name], env=env, log=log)
+            _run_aws(["iam", "create-user", "--user-name", user_name], env=env, log=log, aws_bin=aws_bin)
         except RuntimeError as exc:
             if "EntityAlreadyExists" not in str(exc):
                 raise
@@ -238,6 +313,7 @@ def provision_s3(
             env=env,
             log=log,
             check=False,
+            aws_bin=aws_bin,
         )
 
         keys = json.loads(
@@ -245,6 +321,7 @@ def provision_s3(
                 ["iam", "create-access-key", "--user-name", user_name],
                 env=env,
                 log=log,
+                aws_bin=aws_bin,
             ).stdout
         )["AccessKey"]
 

@@ -298,6 +298,12 @@ def apply_system(ctx: InstallerContext, _payload: dict[str, Any]) -> StepResult:
     if not shutil.which("python3"):
         ctx.run(["apt-get", "update", "-qq"])
         ctx.run(["apt-get", "install", "-y", "python3", "curl", "wget", "ca-certificates"])
+    try:
+        from aws_setup import ensure_aws_cli
+
+        ensure_aws_cli(ctx.log)
+    except Exception as exc:
+        ctx.log(f"AWS CLI preinstall skipped: {exc}")
     return check_system(ctx)
 
 

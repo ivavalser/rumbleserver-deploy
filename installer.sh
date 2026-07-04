@@ -182,6 +182,22 @@ cd "$INSTALL_DIR"
 
 mkdir -p backups
 
+if ! command -v aws &>/dev/null && [ ! -x /usr/local/bin/aws ] && [ ! -x /usr/local/aws-cli/v2/current/bin/aws ]; then
+    echo "📦 Installing AWS CLI (needed for S3 setup)..."
+    apt-get update -qq
+    apt-get install -y awscli unzip curl ca-certificates 2>/dev/null || true
+    if ! command -v aws &>/dev/null && [ ! -x /usr/local/bin/aws ]; then
+        ARCH="$(uname -m)"
+        case "$ARCH" in
+            aarch64|arm64) AWS_ARCH="aarch64" ;;
+            *) AWS_ARCH="x86_64" ;;
+        esac
+        curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${AWS_ARCH}.zip" -o /tmp/awscliv2.zip
+        unzip -oq /tmp/awscliv2.zip -d /tmp
+        /tmp/aws/install --update
+    fi
+fi
+
 TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
 echo "$TOKEN" > "$TOKEN_FILE"
 chmod 600 "$TOKEN_FILE"
@@ -194,6 +210,7 @@ fi
 export RUMBLE_INSTALL_DIR="$INSTALL_DIR"
 export RUMBLE_INSTALLER_TOKEN="$TOKEN"
 export RUMBLE_INSTALLER_PORT="$INSTALLER_PORT"
+export PATH="/usr/local/bin:/usr/local/aws-cli/v2/current/bin:${PATH:-/usr/bin:/bin}"
 
 echo "▶️  Starting web installer on port ${INSTALLER_PORT}..."
 nohup python3 "$INSTALL_DIR/installer/server.py" >> "$INSTALL_DIR/installer.log" 2>&1 &
