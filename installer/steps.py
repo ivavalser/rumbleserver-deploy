@@ -1195,6 +1195,100 @@ def apply_nginx(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
     return check_nginx(ctx)
 
 
+def _parse_compose_ps(stdout: str) -> dict[str, str]:
+    states: dict[str, str] = {}
+    for line in stdout.strip().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        name = entry.get("Name") or entry.get("Service") or ""
+        state = entry.get("State") or entry.get("Status") or "unknown"
+        if name:
+            states[name] = state
+    return states
+
+
+def _finish_service_checks(ctx: InstallerContext) -> list[dict[str, Any]]:
+    expected: list[tuple[str, str]] = []
+    if not ctx.get("use_external_db"):
+        expected.append(("rumbleserver_db", "PostgreSQL"))
+    if not ctx.get("use_external_redis"):
+        expected.append(("rumbleserver_redis", "Redis"))
+    expected.extend(
+        [
+            ("rumbleserver_web", "Web (Daphne)"),
+            ("rumbleserver_worker", "Background worker"),
+            ("rumbleserver_push_worker", "Push worker"),
+        ]
+    )
+
+    ps = ctx.run(ctx.compose_base() + ["ps", "--format", "json"], check=False)
+    running = _parse_compose_ps(ps.stdout or "")
+
+    items: list[dict[str, Any]] = []
+    for container, label in expected:
+        state = running.get(container, "not running")
+        ok = state.lower() == "running"
+        items.append({"label": label, "ok": ok, "detail": state})
+    return items
+
+
+def _finish_health_checks(ctx: InstallerContext) -> list[dict[str, Any]]:
+    checks: list[dict[str, Any]] = []
+    domain = (ctx.get("domain") or "").strip()
+
+    django = ctx.run(
+        ctx.compose_base() + ["exec", "-T", "web", "python", "manage.py", "check"],
+        check=False,
+    )
+    checks.append(
+        {
+            "label": "Django (manage.py check)",
+            "ok": django.returncode == 0,
+            "detail": "ok" if django.returncode == 0 else "failed",
+        }
+    )
+
+    if shutil.which("nginx"):
+        nginx_test = ctx.run(["nginx", "-t"], check=False)
+        checks.append(
+            {
+                "label": "Nginx configuration",
+                "ok": nginx_test.returncode == 0,
+                "detail": "ok" if nginx_test.returncode == 0 else "failed",
+            }
+        )
+
+    if domain and domain not in ("localhost", "127.0.0.1"):
+        https = ctx.run(
+            [
+                "curl",
+                "-sSI",
+                "-o",
+                "/dev/null",
+                "-w",
+                "%{http_code}",
+                f"https://{domain}/admin/",
+            ],
+            check=False,
+        )
+        code = (https.stdout or "").strip()
+        ok = code in ("200", "301", "302", "404")
+        checks.append(
+            {
+                "label": f"HTTPS ({domain})",
+                "ok": ok,
+                "detail": f"HTTP {code}" if code else "no response",
+            }
+        )
+
+    return checks
+
+
 def check_finish(ctx: InstallerContext) -> StepResult:
     for step in STEPS:
         if step.id == "finish":
@@ -1219,8 +1313,20 @@ def check_finish(ctx: InstallerContext) -> StepResult:
 
     domain = ctx.get("domain") or "localhost"
     admin = ctx.get("admin_username") or "admin"
+    services = _finish_service_checks(ctx)
+    checks = _finish_health_checks(ctx)
+    all_ok = all(item["ok"] for item in services) and all(item["ok"] for item in checks)
+
+    compose_ps = " ".join(ctx.compose_base()) + " ps"
+    compose_logs = " ".join(ctx.compose_base()) + " logs -f web"
+    commands = [
+        f"cd {ctx.install_dir}",
+        compose_ps,
+        compose_logs,
+    ]
+
     summary_lines = [
-        "Rumble Server — installation complete",
+        "RMBL Chat Server — installation complete",
         "",
         f"Admin:     https://{domain}/admin/",
         f"Username:  {admin}",
@@ -1228,14 +1334,33 @@ def check_finish(ctx: InstallerContext) -> StepResult:
         f"Directory: {ctx.install_dir}",
         "",
         "Useful commands:",
-        f"  cd {ctx.install_dir}",
-        f"  {' '.join(ctx.compose_base())} ps",
-        f"  {' '.join(ctx.compose_base())} logs -f web",
+        *[f"  {cmd}" for cmd in commands],
     ]
     summary = "\n".join(summary_lines)
     summary_path = ctx.install_dir / "install-summary.txt"
     summary_path.write_text(summary + "\n", encoding="utf-8")
-    return _ok(summary, summary=summary)
+
+    if all_ok:
+        message = "Installation complete — all services are running."
+    else:
+        message = "Installation finished — some checks need attention (see below)."
+
+    return StepResult(
+        ok=True,
+        message=message,
+        data={
+            "all_ok": all_ok,
+            "domain": domain,
+            "admin_url": f"https://{domain}/admin/" if domain not in ("localhost", "127.0.0.1") else f"http://127.0.0.1:8000/admin/",
+            "admin_username": admin,
+            "install_dir": str(ctx.install_dir),
+            "env_path": str(ctx.env_path),
+            "services": services,
+            "checks": checks,
+            "commands": commands,
+            "summary": summary,
+        },
+    )
 
 
 def apply_finish(ctx: InstallerContext, _payload: dict[str, Any]) -> StepResult:

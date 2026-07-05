@@ -166,6 +166,54 @@
       cursor: wait;
     }
     .panel.step-busy .actions button { pointer-events: none; opacity: 0.55; }
+    .finish-panel { display: flex; flex-direction: column; gap: 16px; }
+    .finish-loading { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 0.9rem; padding: 8px 0; }
+    .finish-hero {
+      padding: 18px 20px;
+      border-radius: var(--radius);
+      border: 1px solid rgba(34,197,94,.35);
+      background: rgba(34,197,94,.1);
+    }
+    .finish-hero.warn {
+      border-color: rgba(245,158,11,.45);
+      background: rgba(245,158,11,.1);
+    }
+    .finish-hero h3 { margin: 0 0 6px; font-size: 1.05rem; display: flex; align-items: center; gap: 8px; }
+    .finish-hero p { margin: 0; color: var(--muted); font-size: 0.88rem; line-height: 1.45; }
+    .finish-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+    .finish-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .finish-card h4 { margin: 0 0 10px; font-size: 0.92rem; font-weight: 600; }
+    .finish-admin-link {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 10px 16px;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    .finish-admin-link:hover { background: var(--accent-hover); }
+    .finish-meta { font-size: 0.85rem; color: var(--muted); line-height: 1.65; }
+    .finish-meta code { color: var(--text); font-size: 0.82rem; word-break: break-all; }
+    .finish-commands {
+      margin: 0;
+      padding: 12px;
+      background: #111827;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.78rem;
+      white-space: pre-wrap;
+      color: #cbd5e1;
+      line-height: 1.5;
+    }
   </style>
 </head>
 <body>
@@ -301,6 +349,18 @@
         adminPasswordGenerate: 'Generate',
         adminPasswordMismatch: 'Passwords do not match.',
         adminPasswordRequired: 'Enter and confirm the password.',
+        finishCompleteTitle: 'Installation complete',
+        finishAllRunning: 'All services are running and health checks passed.',
+        finishSomeIssues: 'Some checks need attention — review the status below.',
+        finishServices: 'Docker services',
+        finishHealth: 'Health checks',
+        finishAdmin: 'Django Admin',
+        finishOpenAdmin: 'Open Admin panel',
+        finishUsername: 'Username',
+        finishPaths: 'Paths',
+        finishCommands: 'Useful commands',
+        finishRefresh: 'Refresh status',
+        finishChecking: 'Checking services…',
       },
       ru: {
         title: 'Rumble Server — установщик',
@@ -393,6 +453,18 @@
         adminPasswordGenerate: 'Сгенерировать',
         adminPasswordMismatch: 'Пароли не совпадают.',
         adminPasswordRequired: 'Введи пароль и подтверждение.',
+        finishCompleteTitle: 'Установка завершена',
+        finishAllRunning: 'Все сервисы запущены, проверки пройдены.',
+        finishSomeIssues: 'Есть проблемы — смотри статус ниже.',
+        finishServices: 'Docker-сервисы',
+        finishHealth: 'Проверки',
+        finishAdmin: 'Django Admin',
+        finishOpenAdmin: 'Открыть Admin panel',
+        finishUsername: 'Имя пользователя',
+        finishPaths: 'Пути',
+        finishCommands: 'Полезные команды',
+        finishRefresh: 'Обновить статус',
+        finishChecking: 'Проверяем сервисы…',
         externalDb: 'Внешняя PostgreSQL',
         externalRedis: 'Внешний Redis',
         strongPassword: 'Сильный пароль',
@@ -856,6 +928,81 @@
 
     function esc(s) { return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+    function renderFinishStatusItems(items) {
+      if (!items || !items.length) return `<p class="field-hint">${esc(t('error'))}</p>`;
+      return items.map(item =>
+        `<div class="status-item ${item.ok ? 'ok' : 'fail'}">${item.ok ? '✓' : '✗'} ${esc(item.label)}` +
+        (item.detail ? `<span style="color:var(--muted);margin-left:6px">(${esc(item.detail)})</span>` : '') +
+        `</div>`
+      ).join('');
+    }
+
+    function renderFinishPanel(result) {
+      const el = document.getElementById('finish-panel');
+      if (!el) return;
+      const d = result?.data || {};
+      const allOk = d.all_ok !== false;
+      const commands = (d.commands || []).join('\n');
+      el.innerHTML = `
+        <div class="finish-hero ${allOk ? '' : 'warn'}">
+          <h3>${allOk ? '✓' : '!'} ${esc(t('finishCompleteTitle'))}</h3>
+          <p>${esc(allOk ? t('finishAllRunning') : t('finishSomeIssues'))}</p>
+        </div>
+        <div class="finish-grid">
+          <div class="finish-card">
+            <h4>${esc(t('finishServices'))}</h4>
+            ${renderFinishStatusItems(d.services || [])}
+          </div>
+          <div class="finish-card">
+            <h4>${esc(t('finishHealth'))}</h4>
+            ${renderFinishStatusItems(d.checks || [])}
+          </div>
+        </div>
+        <div class="finish-card">
+          <h4>${esc(t('finishAdmin'))}</h4>
+          <div class="finish-meta">
+            <div><strong>${esc(t('finishUsername'))}:</strong> <code>${esc(d.admin_username || 'admin')}</code></div>
+          </div>
+          ${d.admin_url ? `<a class="finish-admin-link" href="${esc(d.admin_url)}" target="_blank" rel="noopener">${esc(t('finishOpenAdmin'))}</a>` : ''}
+        </div>
+        <div class="finish-card">
+          <h4>${esc(t('finishPaths'))}</h4>
+          <div class="finish-meta">
+            <div><strong>.env</strong><br><code>${esc(d.env_path || '')}</code></div>
+            <div style="margin-top:8px"><strong>${esc(t('directory'))}</strong><br><code>${esc(d.install_dir || '')}</code></div>
+          </div>
+        </div>
+        <div class="finish-card">
+          <h4>${esc(t('finishCommands'))}</h4>
+          <pre class="finish-commands">${esc(commands)}</pre>
+        </div>`;
+    }
+
+    async function refreshFinishStatus() {
+      const panel = document.getElementById('finish-panel');
+      if (panel) {
+        panel.innerHTML = `<div class="finish-loading"><span class="spinner"></span>${esc(t('finishChecking'))}</div>`;
+      }
+      const btn = document.getElementById('finish-refresh-btn');
+      if (btn) btn.disabled = true;
+      try {
+        const res = await api('/api/step/finish/check', { method: 'POST', body: '{}' });
+        const data = await res.json();
+        renderFinishPanel(data);
+        const statusEl = document.getElementById('step-status');
+        if (statusEl && currentStepId === 'finish') {
+          statusEl.classList.remove('hidden', 'ok', 'fail', 'info');
+          statusEl.textContent = data.message || t('finishCompleteTitle');
+          statusEl.classList.add(data.data?.all_ok !== false ? 'ok' : 'fail');
+        }
+        await refreshState(true);
+      } catch (e) {
+        if (panel) panel.innerHTML = `<div class="status fail">${esc(t('error'))}: ${esc(e.message)}</div>`;
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
     function wireSuperuserPasswordForm(root) {
       const pwdInput = root.querySelector('#admin_password');
       const confirmInput = root.querySelector('#admin_password_confirm');
@@ -975,8 +1122,13 @@
         && !lastActionResult.data.ok
         && Date.now() - lastActionResult.time < 120000;
       if (step.status === 'done') {
-        statusEl.textContent = step.message || t('hint');
-        statusEl.classList.add('ok');
+        if (step.id === 'finish') {
+          statusEl.textContent = step.message || t('finishCompleteTitle');
+          statusEl.classList.add(step.data?.all_ok === false ? 'fail' : 'ok');
+        } else {
+          statusEl.textContent = step.message || t('hint');
+          statusEl.classList.add('ok');
+        }
       } else if (step.status === 'error') {
         statusEl.textContent = step.message || t('error');
         statusEl.classList.add('fail');
@@ -1195,7 +1347,9 @@
       }
       if (step.id === 'finish') {
         formEl.classList.remove('hidden');
-        formEl.innerHTML = `<div class="manual">${esc(step.message || '')}</div>`;
+        formEl.innerHTML = `<div id="finish-panel" class="finish-panel"><div class="finish-loading"><span class="spinner"></span>${esc(t('finishChecking'))}</div></div>`;
+        refreshFinishStatus();
+        return;
       }
     }
 
@@ -1329,7 +1483,11 @@
     function renderActions(step) {
       const actions = document.getElementById('step-actions');
       actions.innerHTML = '';
-      if (step.id === 'finish') { actions.appendChild(mkBtn(t('finish'), 'primary', finishInstaller)); return; }
+      if (step.id === 'finish') {
+        actions.appendChild(mkBtn(t('finishRefresh'), 'secondary', refreshFinishStatus, 'finish-refresh-btn'));
+        actions.appendChild(mkBtn(t('finish'), 'primary', finishInstaller));
+        return;
+      }
       actions.appendChild(mkBtn(t('runAuto'), 'primary', () => runAction('apply')));
       actions.appendChild(mkBtn(t('verify'), 'secondary', () => runAction('check')));
       actions.appendChild(mkBtn(t('skip'), 'secondary', () => runAction('skip')));
@@ -1341,7 +1499,7 @@
       }
     }
 
-    function mkBtn(text, cls, handler) {
+    function mkBtn(text, cls, handler, id) {
       const b = document.createElement('button');
       const locked = isAwsStepBusy();
       if (locked && cls.includes('primary') && LONG_RUNNING_STEPS.has(currentStepId)) {
@@ -1349,6 +1507,7 @@
       } else {
         b.textContent = text;
       }
+      if (id) b.id = id;
       b.className = 'btn ' + cls; b.disabled = locked; b.onclick = handler;
       return b;
     }
