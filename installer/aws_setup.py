@@ -184,6 +184,14 @@ def _run_aws(
     return proc
 
 
+def _normalize_bucket_region(location_constraint: str | None) -> str:
+    if not location_constraint:
+        return "us-east-1"
+    if location_constraint == "EU":
+        return "eu-west-1"
+    return location_constraint
+
+
 def _ensure_iam_policy(
     *,
     policy_name: str,
@@ -483,7 +491,6 @@ def provision_s3(
             ],
             env=env,
             log=log,
-            check=False,
             aws_bin=aws_bin,
         )
         log(f"Policy attached to IAM user {user_name}.")
@@ -530,9 +537,25 @@ def verify_s3_access(
     }
 
     checks: list[dict[str, Any]] = []
+    bucket_region = region
 
     def add(label: str, ok: bool) -> None:
         checks.append({"label": label, "ok": ok})
+
+    def fail(
+        message: str,
+        *,
+        manual: str = "",
+        retryable: bool = True,
+    ) -> dict[str, Any]:
+        return {
+            "ok": False,
+            "message": message,
+            "checks": checks,
+            "manual": manual,
+            "retryable": retryable,
+            "bucket_region": bucket_region,
+        }
 
     try:
         identity = json.loads(
@@ -541,50 +564,67 @@ def verify_s3_access(
         add(f"Credentials valid (account {identity.get('Account', '?')})", True)
     except RuntimeError as exc:
         add("Credentials valid", False)
-        return {
-            "ok": False,
-            "message": "AWS credentials are invalid or expired.",
-            "checks": checks,
-            "manual": str(exc),
-        }
-
-    try:
-        _run_aws(
-            ["s3api", "get-bucket-location", "--bucket", bucket],
-            env=env,
-            log=log,
-            aws_bin=aws_bin,
+        return fail(
+            "AWS credentials are invalid or expired.",
+            manual=str(exc),
+            retryable=True,
         )
+
+    try:
+        loc_resp = json.loads(
+            _run_aws(
+                ["s3api", "get-bucket-location", "--bucket", bucket],
+                env=env,
+                log=log,
+                aws_bin=aws_bin,
+            ).stdout
+        )
+        bucket_region = _normalize_bucket_region(loc_resp.get("LocationConstraint"))
+        env["AWS_DEFAULT_REGION"] = bucket_region
         add("s3:GetBucketLocation", True)
-    except RuntimeError:
+        if bucket_region != region:
+            add(f"Bucket region: {bucket_region}", True)
+            log(
+                f"Bucket {bucket} is in {bucket_region}; "
+                f"installer had {region} — using bucket region for S3 checks."
+            )
+    except RuntimeError as exc:
         add("s3:GetBucketLocation", False)
-        return {
-            "ok": False,
-            "message": f"Cannot access bucket '{bucket}'.",
-            "checks": checks,
-            "manual": "Check bucket name, region, and IAM policy (ListBucket + GetBucketLocation on the bucket ARN).",
-        }
+        return fail(
+            f"Cannot access bucket '{bucket}'.",
+            manual=str(exc) or (
+                "Check bucket name, region, and IAM policy "
+                "(ListBucket + GetBucketLocation on the bucket ARN)."
+            ),
+            retryable=True,
+        )
+
+    def s3_args(base: list[str]) -> list[str]:
+        return [*base, "--region", bucket_region]
 
     try:
         _run_aws(
-            ["s3api", "list-objects-v2", "--bucket", bucket, "--max-items", "1"],
+            s3_args(
+                ["s3api", "list-objects-v2", "--bucket", bucket, "--max-items", "1"]
+            ),
             env=env,
             log=log,
             aws_bin=aws_bin,
         )
         add("s3:ListBucket", True)
-    except RuntimeError:
+    except RuntimeError as exc:
         add("s3:ListBucket", False)
-        return {
-            "ok": False,
-            "message": "Missing s3:ListBucket permission.",
-            "checks": checks,
-            "manual": (
+        detail = str(exc).strip()
+        return fail(
+            "Missing s3:ListBucket permission.",
+            manual=(
                 f"IAM policy must allow s3:ListBucket on arn:aws:s3:::{bucket} "
-                "(bucket ARN, not /*). If you re-ran auto-setup before, update the "
-                "RumbleServerS3 policy in IAM or run Create bucket again."
+                f"(bucket ARN, not /*). Bucket region: {bucket_region}. "
+                f"Re-run Create S3 bucket to refresh the policy, or fix JSON in IAM. "
+                f"AWS: {detail}"
             ),
-        }
+            retryable=False,
+        )
 
     test_key = f".installer-test-{secrets.token_hex(8)}"
     body_file = None
@@ -594,16 +634,18 @@ def verify_s3_access(
             body_file = tmp.name
 
         _run_aws(
-            [
-                "s3api",
-                "put-object",
-                "--bucket",
-                bucket,
-                "--key",
-                test_key,
-                "--body",
-                body_file,
-            ],
+            s3_args(
+                [
+                    "s3api",
+                    "put-object",
+                    "--bucket",
+                    bucket,
+                    "--key",
+                    test_key,
+                    "--body",
+                    body_file,
+                ]
+            ),
             env=env,
             log=log,
             aws_bin=aws_bin,
@@ -611,15 +653,17 @@ def verify_s3_access(
         add("s3:PutObject", True)
 
         _run_aws(
-            [
-                "s3api",
-                "get-object",
-                "--bucket",
-                bucket,
-                "--key",
-                test_key,
-                "/tmp/rumble-installer-get-test",
-            ],
+            s3_args(
+                [
+                    "s3api",
+                    "get-object",
+                    "--bucket",
+                    bucket,
+                    "--key",
+                    test_key,
+                    "/tmp/rumble-installer-get-test",
+                ]
+            ),
             env=env,
             log=log,
             aws_bin=aws_bin,
@@ -627,7 +671,9 @@ def verify_s3_access(
         add("s3:GetObject", True)
 
         _run_aws(
-            ["s3api", "delete-object", "--bucket", bucket, "--key", test_key],
+            s3_args(
+                ["s3api", "delete-object", "--bucket", bucket, "--key", test_key]
+            ),
             env=env,
             log=log,
             aws_bin=aws_bin,
@@ -641,17 +687,17 @@ def verify_s3_access(
         else:
             add("s3:DeleteObject", False)
         _run_aws(
-            ["s3api", "delete-object", "--bucket", bucket, "--key", test_key],
+            s3_args(["s3api", "delete-object", "--bucket", bucket, "--key", test_key]),
             env=env,
             log=log,
             check=False,
+            aws_bin=aws_bin,
         )
-        return {
-            "ok": False,
-            "message": "Missing object read/write permissions on the bucket.",
-            "checks": checks,
-            "manual": str(exc),
-        }
+        return fail(
+            "Missing object read/write permissions on the bucket.",
+            manual=str(exc),
+            retryable=False,
+        )
     finally:
         if body_file:
             Path(body_file).unlink(missing_ok=True)
@@ -661,4 +707,6 @@ def verify_s3_access(
         "ok": True,
         "message": f"AWS S3 access verified for bucket '{bucket}'.",
         "checks": checks,
+        "retryable": True,
+        "bucket_region": bucket_region,
     }

@@ -212,6 +212,7 @@
         awsVerifyRetryDone: 'Retry pause complete',
         awsVerifySuccess: 'All S3 checks passed',
         awsVerifyAllFailed: 'Verification failed after {max} attempts',
+        awsVerifyStopped: 'Stopped — fix IAM policy (waiting will not help)',
         awsSavedVerified: 'AWS configuration saved and verified.',
         serverIp: 'This server IP',
         serverIpUnknown: 'Could not detect automatically — check your VPS control panel',
@@ -288,6 +289,7 @@
         awsVerifyRetryDone: 'Пауза перед повтором завершена',
         awsVerifySuccess: 'Все проверки S3 пройдены',
         awsVerifyAllFailed: 'Проверка не прошла после {max} попыток',
+        awsVerifyStopped: 'Остановлено — исправь IAM policy (ожидание не поможет)',
         awsSavedVerified: 'AWS настроен и проверен.',
         serverIp: 'IP этого сервера',
         serverIpUnknown: 'Не удалось определить автоматически — смотри панель VPS',
@@ -531,6 +533,27 @@
       return await res.json();
     }
 
+    function applyAwsBucketRegion(data) {
+      const region = data?.data?.bucket_region;
+      if (!region) return;
+      const sel = document.getElementById('aws_s3_region_name');
+      if (sel && sel.value !== region) sel.value = region;
+    }
+
+    function shouldRetryAwsVerify(data) {
+      if (data?.data?.retryable === false) return false;
+      if (data?.data?.retryable === true) return true;
+      const checks = data?.data?.checks || [];
+      const creds = checks.find(c => (c.label || '').includes('Credentials valid'));
+      if (creds && !creds.ok) return true;
+      const loc = checks.find(c => (c.label || '').includes('GetBucketLocation'));
+      const list = checks.find(c => (c.label || '').includes('ListBucket'));
+      if (creds?.ok && loc?.ok && list && !list.ok) return false;
+      const put = checks.find(c => (c.label || '').includes('PutObject'));
+      if (creds?.ok && list?.ok && put && !put.ok) return false;
+      return true;
+    }
+
     async function checkAwsAccessWithRetry(options = {}) {
       const maxAttempts = options.maxAttempts || 5;
       const initialDelayMs = options.initialDelayMs ?? 12000;
@@ -575,8 +598,10 @@
         );
 
         lastData = await checkAwsAccessOnce();
+        applyAwsBucketRegion(lastData);
         const isLastAttempt = attempt === maxAttempts;
-        renderAwsAccessResult(lastData, { showFailure: isLastAttempt });
+        const canRetry = shouldRetryAwsVerify(lastData);
+        renderAwsAccessResult(lastData, { showFailure: isLastAttempt || !canRetry });
 
         if (lastData.ok) {
           patchStep(
@@ -593,6 +618,11 @@
           fmt(t('awsVerifyAttemptFail'), { n: attempt, max: maxAttempts }),
           'fail',
         );
+
+        if (!canRetry) {
+          pushStep('stopped', t('awsVerifyStopped'), 'fail');
+          return lastData;
+        }
 
         if (attempt < maxAttempts) {
           const pauseStep = pushStep(
@@ -621,6 +651,7 @@
       setAwsFormBusy('verify');
       try {
         const data = await checkAwsAccessOnce();
+        applyAwsBucketRegion(data);
         renderAwsAccessResult(data, { showFailure: true });
         renderAwsVerifyProgress([]);
       } catch (e) {

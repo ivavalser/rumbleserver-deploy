@@ -542,14 +542,22 @@ def check_aws_access(
         return StepResult(
             ok=True,
             message=result["message"],
-            data={"checks": result["checks"]},
+            data={
+                "checks": result["checks"],
+                "retryable": result.get("retryable", True),
+                "bucket_region": result.get("bucket_region"),
+            },
         )
     ctx.set("aws_verified", False)
     return StepResult(
         ok=False,
         message=result["message"],
         manual=result.get("manual", ""),
-        data={"checks": result.get("checks", [])},
+        data={
+            "checks": result.get("checks", []),
+            "retryable": result.get("retryable", True),
+            "bucket_region": result.get("bucket_region"),
+        },
     )
 
 
