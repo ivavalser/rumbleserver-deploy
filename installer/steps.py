@@ -452,6 +452,24 @@ def _domain_from_allowed_hosts(allowed: str) -> str:
     return ""
 
 
+def _ensure_local_allowed_hosts(allowed: str) -> str:
+    parts = [p.strip() for p in allowed.split(",") if p.strip()]
+    for local in ("127.0.0.1", "localhost"):
+        if local not in parts:
+            parts.append(local)
+    return ",".join(parts)
+
+
+def _health_check_host(ctx: InstallerContext) -> str:
+    domain = (ctx.get("domain") or "").strip()
+    if domain:
+        return domain
+    allowed = ctx.get("allowed_hosts") or ""
+    if ctx.env_path.exists():
+        allowed = allowed or _env_value(ctx.env_path.read_text(encoding="utf-8"), "ALLOWED_HOSTS")
+    return _domain_from_allowed_hosts(allowed) or "localhost"
+
+
 def _env_value(text: str, key: str) -> str:
     prefix = f"{key}="
     for line in text.splitlines():
@@ -641,7 +659,9 @@ def _default_env_payload(ctx: InstallerContext) -> dict[str, Any]:
 
 def _write_env_file(ctx: InstallerContext, payload: dict[str, Any]) -> None:
     domain = (payload.get("domain") or "").strip()
-    allowed = (payload.get("allowed_hosts") or domain or "localhost,127.0.0.1").strip()
+    allowed = _ensure_local_allowed_hosts(
+        (payload.get("allowed_hosts") or domain or "localhost,127.0.0.1").strip()
+    )
     env_mode = payload.get("env_mode") or "simple"
     use_external_db = bool(payload.get("use_external_db")) if env_mode == "advanced" else False
     use_external_redis = bool(payload.get("use_external_redis")) if env_mode == "advanced" else False
@@ -911,13 +931,27 @@ def check_deploy(ctx: InstallerContext) -> StepResult:
     )
     if check.returncode != 0:
         return _fail("manage.py check failed.", manual=check.stderr or check.stdout)
+    host = _health_check_host(ctx)
     curl = ctx.run(
-        ["curl", "-fsS", "-o", "/dev/null", "-w", "%{http_code}", "http://127.0.0.1:8000/admin/"],
+        [
+            "curl",
+            "-sS",
+            "-o",
+            "/dev/null",
+            "-w",
+            "%{http_code}",
+            "-H",
+            f"Host: {host}",
+            "http://127.0.0.1:8000/admin/",
+        ],
         check=False,
     )
     code = (curl.stdout or "").strip()
     if code not in ("200", "301", "302", "404"):
-        return _fail(f"Web is not responding on :8000 (code {code or 'n/a'}).")
+        hint = ""
+        if code == "400":
+            hint = f" (HTTP 400 usually means ALLOWED_HOSTS mismatch; checked with Host: {host})"
+        return _fail(f"Web is not responding on :8000 (code {code or 'n/a'}){hint}.")
     return _ok("Services are running, web is responding.")
 
 
@@ -926,14 +960,18 @@ def apply_deploy(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
     ctx.set("version", version)
     env = os.environ.copy()
     env["VERSION"] = version
+    ctx.log("Pulling container images (this may take several minutes)...")
     ctx.run(ctx.compose_base() + ["pull"], env=env)
+    ctx.log("Starting services...")
     ctx.run(ctx.compose_base() + ["up", "-d"], env=env)
     import time
 
-    for attempt in range(30):
+    ctx.log("Waiting for web container to become healthy...")
+    for attempt in range(1, 46):
         result = check_deploy(ctx)
         if result.ok:
             return result
+        ctx.log(f"Health check attempt {attempt}/45 — {result.message}")
         time.sleep(2)
     return check_deploy(ctx)
 
