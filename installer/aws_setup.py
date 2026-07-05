@@ -285,6 +285,85 @@ def _ensure_iam_policy(
         return policy_arn
 
 
+def _ensure_user_access_key(
+    user_name: str,
+    *,
+    env: dict[str, str],
+    log: Callable[[str], None],
+    aws_bin: str,
+) -> dict[str, str]:
+    """Create a new access key, deleting an old one if the 2-key quota is full."""
+    try:
+        created = json.loads(
+            _run_aws(
+                ["iam", "create-access-key", "--user-name", user_name],
+                env=env,
+                log=log,
+                aws_bin=aws_bin,
+            ).stdout
+        )["AccessKey"]
+        return {
+            "aws_access_key_id": created["AccessKeyId"],
+            "aws_secret_access_key": created["SecretAccessKey"],
+        }
+    except RuntimeError as exc:
+        msg = str(exc)
+        if "LimitExceeded" not in msg and "AccessKeysPerUser" not in msg:
+            raise
+        log(
+            f"IAM user {user_name} already has 2 access keys — "
+            "removing the oldest inactive key (or the oldest key)."
+        )
+        listed = json.loads(
+            _run_aws(
+                ["iam", "list-access-keys", "--user-name", user_name],
+                env=env,
+                log=log,
+                aws_bin=aws_bin,
+            ).stdout
+        )["AccessKeyMetadata"]
+        if not listed:
+            raise RuntimeError(
+                f"Cannot create access key for {user_name}: quota exceeded and no keys found."
+            ) from exc
+        inactive = [k for k in listed if k.get("Status") == "Inactive"]
+        victim = (
+            sorted(inactive, key=lambda k: k.get("CreateDate", ""))[0]
+            if inactive
+            else sorted(listed, key=lambda k: k.get("CreateDate", ""))[0]
+        )
+        key_id = victim["AccessKeyId"]
+        log(
+            f"Deleting access key {key_id} "
+            f"(status={victim.get('Status', '?')}, created={victim.get('CreateDate', '?')})."
+        )
+        _run_aws(
+            [
+                "iam",
+                "delete-access-key",
+                "--user-name",
+                user_name,
+                "--access-key-id",
+                key_id,
+            ],
+            env=env,
+            log=log,
+            aws_bin=aws_bin,
+        )
+        created = json.loads(
+            _run_aws(
+                ["iam", "create-access-key", "--user-name", user_name],
+                env=env,
+                log=log,
+                aws_bin=aws_bin,
+            ).stdout
+        )["AccessKey"]
+        return {
+            "aws_access_key_id": created["AccessKeyId"],
+            "aws_secret_access_key": created["SecretAccessKey"],
+        }
+
+
 def _iam_policy_document(bucket: str) -> dict[str, Any]:
     bucket_arn = f"arn:aws:s3:::{bucket}"
     objects_arn = f"arn:aws:s3:::{bucket}/*"
@@ -409,18 +488,15 @@ def provision_s3(
         )
         log(f"Policy attached to IAM user {user_name}.")
 
-        keys = json.loads(
-            _run_aws(
-                ["iam", "create-access-key", "--user-name", user_name],
-                env=env,
-                log=log,
-                aws_bin=aws_bin,
-            ).stdout
-        )["AccessKey"]
+        key_pair = _ensure_user_access_key(
+            user_name,
+            env=env,
+            log=log,
+            aws_bin=aws_bin,
+        )
 
         return {
-            "aws_access_key_id": keys["AccessKeyId"],
-            "aws_secret_access_key": keys["SecretAccessKey"],
+            **key_pair,
             "aws_storage_bucket_name": bucket,
             "aws_s3_region_name": region,
             "aws_s3_endpoint_url": _endpoint_for_region(region),

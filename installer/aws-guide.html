@@ -69,7 +69,9 @@
         "iam:DeletePolicyVersion",
         "iam:CreateUser",
         "iam:AttachUserPolicy",
-        "iam:CreateAccessKey"
+        "iam:CreateAccessKey",
+        "iam:ListAccessKeys",
+        "iam:DeleteAccessKey"
       ],
       "Resource": "*"
     },
@@ -141,6 +143,10 @@
   <p>Bucket-level actions (<code>ListBucket</code>, <code>GetBucketLocation</code>) go on <code>arn:aws:s3:::bucket-name</code> — <strong>without</strong> <code>/*</code>. Object actions go on <code>arn:aws:s3:::bucket-name/*</code>. Putting <code>ListBucket</code> only on the <code>/*</code> ARN is a common mistake and causes exactly <em>GetBucketLocation ✓ / ListBucket ✗</em> in the installer.</p>
   <p>For several servers/buckets, add more ARNs to each <code>Resource</code> array (as in a shared app user policy).</p>
   <p>Name: <code>RumbleServerS3-YOUR_BUCKET_NAME</code> → Create policy.</p>
+
+  <div class="warn">
+    <strong>Access key limit (2 per user):</strong> re-running automatic setup deletes the oldest inactive key, or the oldest key if both are active, then creates a fresh one. Update bootstrap policy with <code>iam:ListAccessKeys</code> and <code>iam:DeleteAccessKey</code> if you use a custom bootstrap user.
+  </div>
 
   <div class="warn">
     <strong>ListBucket fails but GetBucketLocation works?</strong><br>

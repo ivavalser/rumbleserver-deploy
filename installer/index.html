@@ -115,6 +115,23 @@
     .verify-step.done { color: var(--ok); }
     .verify-step.fail { color: var(--err); }
     .verify-step .mark { width: 16px; flex-shrink: 0; text-align: center; }
+    .env-form.aws-form-root { position: relative; }
+    .aws-busy-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: 48px;
+      background: rgba(15, 20, 25, 0.55);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 0.92rem;
+      font-weight: 600;
+      cursor: wait;
+    }
+    .panel.aws-step-locked .actions button { pointer-events: none; opacity: 0.55; }
   </style>
 </head>
 <body>
@@ -185,6 +202,7 @@
         checkAwsAccess: 'Check S3 access',
         awsProvisioning: 'Creating bucket & IAM user…',
         awsChecking: 'Checking S3 access…',
+        awsWorking: 'Working…',
         awsVerifyWaiting: 'Waiting for AWS to propagate credentials ({s}s)…',
         awsVerifyWaitDone: 'Propagation wait complete',
         awsVerifyAttempt: 'Checking S3 access (attempt {n}/{max})…',
@@ -255,6 +273,7 @@
         checkAwsAccess: 'Проверить доступ к S3',
         awsProvisioning: 'Создаём bucket и IAM-пользователя…',
         awsChecking: 'Проверяем доступ к S3…',
+        awsWorking: 'Выполняется…',
         awsVerifyWaiting: 'Ждём распространения credentials в AWS ({s} с)…',
         awsVerifyWaitDone: 'Ожидание завершено',
         awsVerifyAttempt: 'Проверка доступа к S3 (попытка {n}/{max})…',
@@ -405,10 +424,35 @@
 
     function syncAwsFormButtons() {
       const op = awsOperation;
+      const locked = isAwsStepBusy();
+      const panel = document.getElementById('step-panel');
+      if (panel) panel.classList.toggle('aws-step-locked', locked && currentStepId === 'aws');
+
+      const root = document.getElementById('aws-form-root');
+      if (root) {
+        root.classList.toggle('aws-locked', locked);
+        root.querySelectorAll('button, input, select').forEach(el => { el.disabled = locked; });
+        const guideLink = root.querySelector('#aws-guide-link');
+        if (guideLink) {
+          guideLink.style.pointerEvents = locked ? 'none' : '';
+          guideLink.style.opacity = locked ? '0.45' : '';
+        }
+      }
+
+      const overlay = document.getElementById('aws-busy-overlay');
+      if (overlay) {
+        overlay.classList.toggle('hidden', !locked);
+        overlay.textContent = op === 'provision'
+          ? t('awsProvisioning')
+          : op === 'verify'
+            ? t('awsChecking')
+            : locked
+              ? t('awsWorking')
+              : '';
+      }
+
       const provisionBtn = document.getElementById('aws-provision-btn');
       const checkBtn = document.getElementById('aws-access-check-btn');
-      const guideLink = document.getElementById('aws-guide-link');
-      const locked = isAwsStepBusy();
       if (provisionBtn) {
         provisionBtn.disabled = locked;
         if (op === 'provision') {
@@ -424,10 +468,6 @@
         } else if (!op) {
           checkBtn.textContent = t('checkAwsAccess');
         }
-      }
-      if (guideLink) {
-        guideLink.style.pointerEvents = locked ? 'none' : '';
-        guideLink.style.opacity = locked ? '0.5' : '';
       }
     }
 
@@ -788,7 +828,8 @@
         formEl.classList.remove('hidden');
         const a = state.aws_defaults || {};
         formEl.innerHTML = `
-          <div class="env-form">
+          <div class="env-form aws-form-root" id="aws-form-root">
+            <div id="aws-busy-overlay" class="aws-busy-overlay hidden" aria-live="polite"></div>
             <section class="env-section">
               <h3 class="env-section-title">${t('awsTitle')}</h3>
               <p class="env-section-lead">${t('awsStepHelp')}</p>
@@ -838,9 +879,9 @@
 
             <div id="aws-status-list" class="status-list"></div>
           </div>`;
-        formEl.querySelector('#aws-guide-link').onclick = e => { e.preventDefault(); openAwsGuide(); };
-        formEl.querySelector('#aws-provision-btn').onclick = () => provisionAws();
-        formEl.querySelector('#aws-access-check-btn').onclick = () => checkAwsAccess();
+        formEl.querySelector('#aws-guide-link').onclick = e => { e.preventDefault(); if (!isAwsStepBusy()) openAwsGuide(); };
+        formEl.querySelector('#aws-provision-btn').onclick = () => { if (!isAwsStepBusy()) provisionAws(); };
+        formEl.querySelector('#aws-access-check-btn').onclick = () => { if (!isAwsStepBusy()) checkAwsAccess(); };
         syncAwsFormButtons();
         return;
       }
@@ -897,7 +938,8 @@
       }
       if (awsOperation) return;
       busy = true;
-      setAwsFormBusy('provision');
+      awsOperation = 'provision';
+      syncAwsFormButtons();
       renderCurrentStep();
       renderAwsVerifyProgress([]);
       try {
@@ -1024,7 +1066,12 @@
 
     async function runAction(action, dnsOnly = false, silent = false) {
       if (isAwsStepBusy()) return;
-      busy = true; renderCurrentStep();
+      busy = true;
+      if (currentStepId === 'aws') {
+        awsOperation = (action === 'apply' || action === 'check') ? 'verify' : 'working';
+      }
+      syncAwsFormButtons();
+      renderCurrentStep();
       try {
         if (dnsOnly && (currentStepId === 'nginx' || currentStepId === 'env')) {
           const domain = currentStepId === 'env'
@@ -1066,7 +1113,12 @@
         await refreshState();
         advanceToNextStep(action, data);
       } catch (e) { if (!silent) alert(t('error') + ': ' + e.message); }
-      finally { busy = false; renderCurrentStep(); }
+      finally {
+        busy = false;
+        awsOperation = null;
+        syncAwsFormButtons();
+        renderCurrentStep();
+      }
     }
 
     function showActionResult(data, silent) {
