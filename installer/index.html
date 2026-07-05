@@ -147,6 +147,33 @@
     #aws-access-status, #env-dns-status, #nginx-dns-status { font-size: 0.85rem; margin-top: 4px; }
     .link-row { margin: 10px 0; }
     .link-row a { color: var(--purple-light); }
+    .guide-callout {
+      display: flex; gap: 16px; align-items: flex-start;
+      padding: 18px 20px; margin-bottom: 20px;
+      background: linear-gradient(135deg, rgba(110,91,233,.24), rgba(168,230,207,.1));
+      border: 2px solid rgba(110,91,233,.5); border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(110,91,233,.15);
+    }
+    .guide-callout-step {
+      flex-shrink: 0; width: 36px; height: 36px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--purple); color: #fff; font-weight: 700; font-size: 1rem;
+      font-family: var(--font-heading);
+    }
+    .guide-callout-body { flex: 1; min-width: 0; }
+    .guide-callout-body strong {
+      display: block; font-size: 1rem; color: var(--text); margin-bottom: 6px;
+      font-family: var(--font-heading);
+    }
+    .guide-callout-body p { margin: 0 0 14px; font-size: 0.88rem; color: var(--muted); line-height: 1.55; }
+    .guide-callout-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 22px; background: var(--purple); color: #fff !important;
+      border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 0.92rem;
+      font-family: var(--font-heading); box-shadow: 0 4px 18px rgba(110,91,233,.4);
+      transition: background .2s, transform .15s;
+    }
+    .guide-callout-btn:hover { background: var(--purple-light); transform: translateY(-1px); }
     @keyframes spin { to { transform: rotate(360deg); } }
     .spinner {
       display: inline-block;
@@ -475,9 +502,18 @@
         envSectionMode: 'Setup mode',
         envSectionDomain: 'Domain and DNS',
         envSectionDatabase: 'Database and Redis',
-        awsStepHelp: 'Rumble stores uploaded files in a private S3 bucket. Create an IAM user for the app, or use automatic setup with bootstrap credentials.',
-        awsBootstrapHelp: 'Bootstrap credentials are from a separate IAM user with permission to create S3 buckets and IAM users. See the setup guide — do not put bootstrap keys into .env.',
-        awsSectionAuto: 'Automatic setup',
+        awsStepHelp: 'Rumble stores uploaded files in a private S3 bucket with a dedicated IAM user.',
+        awsSectionMode: 'Setup method',
+        awsAuto: 'Automatic (recommended)',
+        awsManual: 'Manual in AWS Console',
+        awsAutoDesc: 'Create a bootstrap IAM user with a policy — the installer creates the bucket and app user for you.',
+        awsManualDesc: 'Create the bucket and app IAM user yourself in the AWS Console, then paste the app credentials here.',
+        awsGuideRequired: 'Read the setup guide first — required before entering anything',
+        awsGuideAutoLead: 'Open the guide and follow the «Bootstrap IAM user» section: create the user, attach the policy, copy access keys. Then return here.',
+        awsGuideManualLead: 'Open the guide and follow all manual steps: bucket, IAM policy, app user with access keys. Then return here and fill in the fields below.',
+        awsGuideOpen: 'Open AWS setup guide',
+        awsBootstrapHelp: 'Bootstrap credentials are from a separate IAM user with permission to create S3 buckets and IAM users. Do not save bootstrap keys to .env.',
+        awsSectionBootstrap: 'Bootstrap credentials',
         awsSectionBucket: 'Bucket and region',
         awsSectionApp: 'App credentials (for .env)',
         checkAwsAccess: 'Check S3 access',
@@ -625,9 +661,18 @@
         envSectionMode: 'Режим настройки',
         envSectionDomain: 'Домен и DNS',
         envSectionDatabase: 'База данных и Redis',
-        awsStepHelp: 'Rumble хранит загруженные файлы в закрытом S3-бакете. Создай IAM-пользователя для приложения или воспользуйся автоматической настройкой с bootstrap-ключами.',
-        awsBootstrapHelp: 'Bootstrap-ключи — от отдельного IAM-пользователя с правом создавать S3-бакеты и IAM-пользователей. Подробности в инструкции. Не сохраняй bootstrap-ключи в .env.',
-        awsSectionAuto: 'Автоматическая настройка',
+        awsStepHelp: 'Rumble хранит загруженные файлы в закрытом S3-бакете с отдельным IAM-пользователем.',
+        awsSectionMode: 'Способ настройки',
+        awsAuto: 'Автоматически (рекомендуется)',
+        awsManual: 'Вручную в консоли AWS',
+        awsAutoDesc: 'Создай bootstrap IAM-пользователя с политикой — установщик сам создаст бакет и пользователя для приложения.',
+        awsManualDesc: 'Создай бакет и IAM-пользователя для приложения в консоли AWS, затем вставь ключи приложения сюда.',
+        awsGuideRequired: 'Сначала прочитай инструкцию — обязательно, до ввода данных',
+        awsGuideAutoLead: 'Открой инструкцию и пройди раздел «Bootstrap IAM-пользователь»: создай пользователя, прикрепи политику, скопируй ключи. Затем вернись сюда.',
+        awsGuideManualLead: 'Открой инструкцию и выполни все шаги вручную: бакет, IAM-политика, пользователь приложения с ключами. Затем вернись и заполни поля ниже.',
+        awsGuideOpen: 'Открыть инструкцию по AWS',
+        awsBootstrapHelp: 'Bootstrap-ключи — от отдельного IAM-пользователя с правом создавать S3-бакеты и IAM-пользователей. Не сохраняй bootstrap-ключи в .env.',
+        awsSectionBootstrap: 'Bootstrap-ключи',
         awsSectionBucket: 'Бакет и регион',
         awsSectionApp: 'Ключи приложения (для .env)',
         checkAwsAccess: 'Проверить доступ к S3',
@@ -1068,11 +1113,10 @@
       if (root) {
         root.classList.toggle('aws-locked', locked);
         root.querySelectorAll('button, input, select').forEach(el => { el.disabled = locked; });
-        const guideLink = root.querySelector('#aws-guide-link');
-        if (guideLink) {
-          guideLink.style.pointerEvents = locked ? 'none' : '';
-          guideLink.style.opacity = locked ? '0.45' : '';
-        }
+        root.querySelectorAll('.guide-callout-btn').forEach(link => {
+          link.style.pointerEvents = locked ? 'none' : '';
+          link.style.opacity = locked ? '0.45' : '';
+        });
       }
 
       const overlay = document.getElementById('aws-busy-overlay');
@@ -1710,24 +1754,44 @@
       if (step.id === 'aws') {
         formEl.classList.remove('hidden');
         const a = state.aws_defaults || {};
+        const setupMode = defaultAwsSetupMode(a);
         formEl.innerHTML = `
           <div class="env-form aws-form-root" id="aws-form-root">
             <div id="aws-busy-overlay" class="aws-busy-overlay hidden" aria-live="polite"></div>
+
             <section class="env-section">
               <h3 class="env-section-title">${t('awsTitle')}</h3>
               <p class="env-section-lead">${t('awsStepHelp')}</p>
-              <div class="link-row"><a href="#" id="aws-guide-link">${t('awsGuide')} ↗</a></div>
+              <div class="mode-switch" style="margin-top:12px">
+                <label><input type="radio" name="aws_setup_mode" value="auto" ${setupMode === 'auto' ? 'checked' : ''}> ${t('awsAuto')}</label>
+                <label><input type="radio" name="aws_setup_mode" value="manual" ${setupMode === 'manual' ? 'checked' : ''}> ${t('awsManual')}</label>
+              </div>
+              <p class="env-section-lead" id="aws-mode-desc" style="margin-top:12px;margin-bottom:0">${setupMode === 'manual' ? t('awsManualDesc') : t('awsAutoDesc')}</p>
             </section>
 
-            <section class="env-section">
-              <h3 class="env-section-title">${t('awsSectionAuto')}</h3>
+            <div id="aws-guide-auto" class="guide-callout ${setupMode !== 'auto' ? 'hidden' : ''}">
+              <span class="guide-callout-step">1</span>
+              <div class="guide-callout-body">
+                <strong>${t('awsGuideRequired')}</strong>
+                <p>${t('awsGuideAutoLead')}</p>
+                <a href="#" class="guide-callout-btn" id="aws-guide-link-auto">${t('awsGuideOpen')} ↗</a>
+              </div>
+            </div>
+            <div id="aws-guide-manual" class="guide-callout ${setupMode !== 'manual' ? 'hidden' : ''}">
+              <span class="guide-callout-step">1</span>
+              <div class="guide-callout-body">
+                <strong>${t('awsGuideRequired')}</strong>
+                <p>${t('awsGuideManualLead')}</p>
+                <a href="#" class="guide-callout-btn" id="aws-guide-link-manual">${t('awsGuideOpen')} ↗</a>
+              </div>
+            </div>
+
+            <section class="env-section ${setupMode !== 'auto' ? 'hidden' : ''}" id="aws-flow-auto-fields">
+              <h3 class="env-section-title">${t('awsSectionBootstrap')}</h3>
               <p class="env-section-lead">${t('awsBootstrapHelp')}</p>
               <div class="form-grid">
                 <label>${t('awsBootstrapKey')}<input type="text" id="aws_bootstrap_access_key_id" autocomplete="off" value="${esc(a.aws_bootstrap_access_key_id || '')}"></label>
                 <label>${t('awsBootstrapSecret')}<input type="text" id="aws_bootstrap_secret_access_key" autocomplete="off" value="${esc(a.aws_bootstrap_secret_access_key || '')}"></label>
-              </div>
-              <div class="actions" style="margin:12px 0 0">
-                <button type="button" class="btn secondary" id="aws-provision-btn">${t('awsProvision')}</button>
               </div>
             </section>
 
@@ -1742,9 +1806,12 @@
                 </label>
                 <label>${t('awsBucket')}<input type="text" id="aws_storage_bucket_name" autocomplete="off" value="${esc(a.aws_storage_bucket_name || '')}" placeholder="rumble-myserver-prod"></label>
               </div>
+              <div class="actions ${setupMode !== 'auto' ? 'hidden' : ''}" id="aws-flow-auto-actions" style="margin:16px 0 0">
+                <button type="button" class="btn secondary" id="aws-provision-btn">${t('awsProvision')}</button>
+              </div>
             </section>
 
-            <section class="env-section">
+            <section class="env-section ${setupMode !== 'manual' ? 'hidden' : ''}" id="aws-flow-manual-fields">
               <h3 class="env-section-title">${t('awsSectionApp')}</h3>
               <div class="form-grid">
                 <label>${t('awsAccessKey')}<input type="text" id="aws_access_key_id" autocomplete="off" value="${esc(a.aws_access_key_id || '')}"></label>
@@ -1754,15 +1821,20 @@
                 <div class="actions" style="margin:0">
                   <button type="button" class="btn secondary" id="aws-access-check-btn">${t('checkAwsAccess')}</button>
                 </div>
-                <div id="aws-access-status"></div>
-                <div id="aws-verify-progress" class="aws-verify-progress hidden"></div>
-                <div id="aws-access-checks" class="status-list"></div>
               </div>
             </section>
 
+            <div id="aws-verify-area" class="env-section" style="padding-top:0;border:none;background:transparent">
+              <div id="aws-access-status"></div>
+              <div id="aws-verify-progress" class="aws-verify-progress hidden"></div>
+              <div id="aws-access-checks" class="status-list"></div>
+            </div>
+
             <div id="aws-status-list" class="status-list"></div>
           </div>`;
-        formEl.querySelector('#aws-guide-link').onclick = e => { e.preventDefault(); if (!isAwsStepBusy()) openAwsGuide(); };
+        wireAwsSetupMode(formEl);
+        formEl.querySelector('#aws-guide-link-auto').onclick = e => { e.preventDefault(); if (!isAwsStepBusy()) openAwsGuide('auto'); };
+        formEl.querySelector('#aws-guide-link-manual').onclick = e => { e.preventDefault(); if (!isAwsStepBusy()) openAwsGuide('manual'); };
         formEl.querySelector('#aws-provision-btn').onclick = () => { if (!isAwsStepBusy()) provisionAws(); };
         formEl.querySelector('#aws-access-check-btn').onclick = () => { if (!isAwsStepBusy()) checkAwsAccess(); };
         syncAwsFormButtons();
@@ -1816,12 +1888,37 @@
       return document.querySelector('input[name="env_mode"]:checked')?.value || 'simple';
     }
 
-    function openAwsGuide() {
+    function awsSetupMode() {
+      return document.querySelector('input[name="aws_setup_mode"]:checked')?.value || 'auto';
+    }
+
+    function defaultAwsSetupMode(a) {
+      if (a?.aws_access_key_id && !a?.aws_bootstrap_access_key_id) return 'manual';
+      if (a?.aws_bootstrap_access_key_id) return 'auto';
+      return 'auto';
+    }
+
+    function wireAwsSetupMode(formEl) {
+      formEl.querySelectorAll('input[name="aws_setup_mode"]').forEach(r => {
+        r.onchange = () => {
+          const manual = awsSetupMode() === 'manual';
+          formEl.querySelector('#aws-mode-desc').textContent = manual ? t('awsManualDesc') : t('awsAutoDesc');
+          formEl.querySelector('#aws-guide-auto').classList.toggle('hidden', manual);
+          formEl.querySelector('#aws-guide-manual').classList.toggle('hidden', !manual);
+          formEl.querySelector('#aws-flow-auto-fields').classList.toggle('hidden', manual);
+          formEl.querySelector('#aws-flow-auto-actions').classList.toggle('hidden', manual);
+          formEl.querySelector('#aws-flow-manual-fields').classList.toggle('hidden', !manual);
+        };
+      });
+    }
+
+    function openAwsGuide(tab) {
       const bucket = document.getElementById('aws_storage_bucket_name')?.value || '';
       const u = new URL('/aws-guide.html', location.origin);
       if (TOKEN) u.searchParams.set('token', TOKEN);
       if (bucket) u.searchParams.set('bucket', bucket);
       u.searchParams.set('lang', lang);
+      u.searchParams.set('tab', tab || awsSetupMode());
       window.open(u.toString(), '_blank');
     }
 
