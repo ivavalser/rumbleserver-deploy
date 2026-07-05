@@ -214,6 +214,14 @@
     }
     .aws-busy-overlay img { width: 80px; height: 80px; }
     .panel.aws-step-locked .actions button { pointer-events: none; opacity: 0.55; }
+    #aws-provision-btn.btn.primary {
+      box-shadow: 0 4px 22px rgba(110,91,233,.45);
+      font-size: 0.95rem;
+      padding: 14px 24px;
+    }
+    #aws-provision-btn.btn.primary:hover:not(:disabled) {
+      box-shadow: 0 6px 28px rgba(110,91,233,.55);
+    }
     #step-panel { position: relative; }
     .step-hero { position: relative; z-index: 20; }
     .step-body { position: relative; min-height: 140px; }
@@ -1048,7 +1056,7 @@
     }
 
     const BUILD_MASCOT_STEPS = new Set(['deploy', 'nginx']);
-    const SKIP_ALLOWED_STEPS = new Set(['system', 'ufw', 'awscli', 'aws', 'superuser', 'nginx']);
+    const SKIP_ALLOWED_STEPS = new Set(['system', 'ufw', 'awscli', 'superuser', 'nginx']);
 
     let lang = localStorage.getItem('installer_lang') || 'en';
     const params = new URLSearchParams(location.search);
@@ -2299,7 +2307,7 @@
                 <label>${t('awsBucket')}<input type="text" id="aws_storage_bucket_name" autocomplete="off" value="${esc(a.aws_storage_bucket_name || '')}" placeholder="rumble-myserver-prod"></label>
               </div>
               <div class="actions ${setupMode !== 'auto' ? 'hidden' : ''}" id="aws-flow-auto-actions" style="margin:16px 0 0">
-                <button type="button" class="btn secondary" id="aws-provision-btn">${t('awsProvision')}</button>
+                <button type="button" class="btn primary" id="aws-provision-btn">${t('awsProvision')}</button>
               </div>
             </section>
 
@@ -2380,6 +2388,17 @@
       return document.querySelector('input[name="aws_setup_mode"]:checked')?.value || 'auto';
     }
 
+    function awsAppCredentialsReady() {
+      const g = id => document.getElementById(id);
+      const key = (g('aws_access_key_id')?.value || state?.aws_defaults?.aws_access_key_id || '').trim();
+      const secret = (g('aws_secret_access_key')?.value || state?.aws_defaults?.aws_secret_access_key || '').trim();
+      return !!(key && secret);
+    }
+
+    function awsAutoRunStepBlocked() {
+      return currentStepId === 'aws' && awsSetupMode() === 'auto' && !awsAppCredentialsReady();
+    }
+
     function defaultAwsSetupMode(a) {
       if (a?.aws_access_key_id && !a?.aws_bootstrap_access_key_id) return 'manual';
       if (a?.aws_bootstrap_access_key_id) return 'auto';
@@ -2396,6 +2415,10 @@
           formEl.querySelector('#aws-flow-auto-fields').classList.toggle('hidden', manual);
           formEl.querySelector('#aws-flow-auto-actions').classList.toggle('hidden', manual);
           formEl.querySelector('#aws-flow-manual-fields').classList.toggle('hidden', !manual);
+          if (currentStepId === 'aws') {
+            const step = state?.steps?.find(s => s.id === 'aws');
+            if (step) renderActions(step);
+          }
         };
       });
     }
@@ -2566,7 +2589,8 @@
         return;
       }
       if (step.status !== 'done') {
-        actions.appendChild(mkBtn(t('runAuto'), 'primary', () => runAction('apply')));
+        const runBlocked = step.id === 'aws' && awsAutoRunStepBlocked();
+        actions.appendChild(mkBtn(t('runAuto'), 'primary', () => runAction('apply'), null, runBlocked));
         actions.appendChild(mkBtn(t('verify'), 'secondary', () => runAction('check')));
         if (SKIP_ALLOWED_STEPS.has(step.id)) {
           actions.appendChild(mkBtn(t('skip'), 'secondary', () => runAction('skip')));
@@ -2587,7 +2611,7 @@
       }
     }
 
-    function mkBtn(text, cls, handler, id) {
+    function mkBtn(text, cls, handler, id, forceDisabled = false) {
       const b = document.createElement('button');
       const locked = isAwsStepBusy();
       if (locked && cls.includes('primary') && isApplyBusy()) {
@@ -2596,7 +2620,9 @@
         b.textContent = text;
       }
       if (id) b.id = id;
-      b.className = 'btn ' + cls; b.disabled = locked; b.onclick = handler;
+      b.className = 'btn ' + cls;
+      b.disabled = locked || forceDisabled;
+      b.onclick = handler;
       return b;
     }
 
