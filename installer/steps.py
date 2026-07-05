@@ -363,13 +363,27 @@ def apply_docker(ctx: InstallerContext, _payload: dict[str, Any]) -> StepResult:
 
 
 def check_awscli(ctx: InstallerContext) -> StepResult:
-    from aws_setup import find_aws_cli
+    from aws_setup import _needs_official_aws_cli_v2, find_aws_cli
 
     path = find_aws_cli()
     if not path:
         return _fail(
             "AWS CLI is not installed yet.",
-            manual="Click «Run automatically» or: apt-get update && apt-get install -y awscli",
+            manual="Click «Run automatically» — installs official AWS CLI v2 and boto3.",
+            cwd="/",
+        )
+    if _needs_official_aws_cli_v2(path):
+        return _fail(
+            "AWS CLI uses Python 3.14 (broken on many S3 commands).",
+            manual="Click «Run automatically» — installer will install official AWS CLI v2.",
+            cwd="/",
+        )
+    try:
+        import boto3  # noqa: PLC0415
+    except ImportError:
+        return _fail(
+            "boto3 is not installed (needed for S3 access checks).",
+            manual="Click «Run automatically».",
             cwd="/",
         )
     version = ctx.run([path, "--version"], check=False)
@@ -379,18 +393,19 @@ def check_awscli(ctx: InstallerContext) -> StepResult:
             manual=f"{path} --version",
             cwd="/",
         )
-    return _ok(version.stdout.strip() or f"AWS CLI: {path}")
+    return _ok(f"{version.stdout.strip() or path}; boto3 ready")
 
 
 def apply_awscli(ctx: InstallerContext, _payload: dict[str, Any]) -> StepResult:
-    from aws_setup import ensure_aws_cli
+    from aws_setup import ensure_aws_runtime
 
     try:
-        path = ensure_aws_cli(ctx.log)
+        path, _boto3 = ensure_aws_runtime(ctx.log)
     except RuntimeError as exc:
         return _fail(str(exc), cwd="/")
     version = ctx.run([path, "--version"], check=False)
-    return _ok(version.stdout.strip() or f"AWS CLI installed: {path}")
+    line = version.stdout.strip() or f"AWS CLI installed: {path}"
+    return _ok(f"{line}; boto3 ready")
 
 
 def check_ghcr(ctx: InstallerContext) -> StepResult:
@@ -524,7 +539,12 @@ def check_aws_access(
     if not bucket:
         return _fail("Enter the S3 bucket name first.")
 
-    from aws_setup import verify_s3_access
+    from aws_setup import ensure_aws_runtime, verify_s3_access
+
+    try:
+        ensure_aws_runtime(ctx.log)
+    except RuntimeError as exc:
+        return _fail(str(exc))
 
     try:
         result = verify_s3_access(

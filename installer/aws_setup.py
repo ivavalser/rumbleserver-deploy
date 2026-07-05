@@ -44,14 +44,29 @@ def _extend_installer_path() -> None:
         os.environ["PATH"] = prefix + os.pathsep + current
 
 
+def _aws_cli_version_line(aws_bin: str) -> str:
+    proc = subprocess.run(
+        [aws_bin, "--version"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return (proc.stdout or proc.stderr or "").strip()
+
+
+def _needs_official_aws_cli_v2(aws_bin: str) -> bool:
+    """apt/pip awscli on Python 3.14 breaks many subcommands (argparse % in help)."""
+    return "Python/3.14" in _aws_cli_version_line(aws_bin)
+
+
 def _locate_aws_bin() -> str | None:
     _extend_installer_path()
-    path = shutil.which("aws")
-    if path:
-        return path
     for candidate in _AWS_BIN_CANDIDATES:
         if Path(candidate).is_file():
             return candidate
+    path = shutil.which("aws")
+    if path:
+        return path
     local = Path.home() / ".local/bin/aws"
     if local.is_file():
         return str(local)
@@ -93,10 +108,36 @@ def find_aws_cli() -> str | None:
 def ensure_aws_cli(log: Callable[[str], None]) -> str:
     """Return path to aws binary, installing awscli via apt/pip/AWS v2 if needed."""
     path = _locate_aws_bin()
+    if path and _needs_official_aws_cli_v2(path):
+        log(
+            f"AWS CLI at {path} uses Python 3.14 (broken on many commands) — "
+            "installing official AWS CLI v2 with bundled Python..."
+        )
+        try:
+            _install_aws_cli_v2(log)
+        except subprocess.CalledProcessError as exc:
+            log(f"AWS CLI v2 install failed: {exc}")
+        path = _locate_aws_bin()
+        if path and not _needs_official_aws_cli_v2(path):
+            log(f"Using AWS CLI: {path} ({_aws_cli_version_line(path)})")
+            return path
+        log("Official AWS CLI v2 install did not replace Python 3.14 build — continuing anyway.")
+
     if path:
         return path
 
-    log("AWS CLI not found — installing awscli (apt)...")
+    log("AWS CLI not found — installing official AWS CLI v2...")
+    try:
+        _install_aws_cli_v2(log)
+    except subprocess.CalledProcessError as exc:
+        log(f"AWS CLI v2 install failed: {exc}")
+
+    path = _locate_aws_bin()
+    if path:
+        log(f"AWS CLI installed: {path}")
+        return path
+
+    log("AWS CLI v2 missing — trying apt awscli...")
     subprocess.run(["apt-get", "update", "-qq"], check=False)
     apt = subprocess.run(
         ["apt-get", "install", "-y", "awscli", "unzip", "curl", "ca-certificates"],
@@ -146,10 +187,83 @@ def ensure_aws_cli(log: Callable[[str], None]) -> str:
     if not path:
         raise RuntimeError(
             "AWS CLI (aws) is not installed and automatic install failed. "
-            "SSH to the server and run: apt-get update && apt-get install -y awscli unzip curl"
+            "SSH to the server and run: curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip -o /tmp/awscliv2.zip && unzip -q /tmp/awscliv2.zip -d /tmp && /tmp/aws/install"
         )
     log(f"AWS CLI installed: {path}")
     return path
+
+
+def ensure_aws_runtime(log: Callable[[str], None]) -> tuple[str, Any]:
+    """Install AWS CLI (official v2 on Python 3.14) and boto3 for S3 checks."""
+    aws_bin = ensure_aws_cli(log)
+    boto3 = _ensure_boto3(log)
+    return aws_bin, boto3
+
+
+def _ensure_boto3(log: Callable[[str], None]):
+    try:
+        import boto3  # noqa: PLC0415
+
+        return boto3
+    except ImportError:
+        pass
+
+    log("Installing boto3 for S3 access checks...")
+    subprocess.run(["apt-get", "update", "-qq"], check=False)
+    apt = subprocess.run(
+        ["apt-get", "install", "-y", "python3-boto3"],
+        capture_output=True,
+        text=True,
+    )
+    if apt.stdout:
+        for line in apt.stdout.strip().split("\n"):
+            if line.strip():
+                log(line)
+    if apt.stderr:
+        for line in apt.stderr.strip().split("\n"):
+            if line.strip():
+                log(line)
+
+    try:
+        import boto3  # noqa: PLC0415
+
+        return boto3
+    except ImportError:
+        pass
+
+    subprocess.run(["apt-get", "install", "-y", "python3-pip"], check=False)
+    for pip_args in (
+        [sys.executable, "-m", "pip", "install", "boto3"],
+        [sys.executable, "-m", "pip", "install", "boto3", "--break-system-packages"],
+    ):
+        pip = subprocess.run(pip_args, capture_output=True, text=True)
+        if pip.stdout:
+            for line in pip.stdout.strip().split("\n"):
+                if line.strip():
+                    log(line)
+        if pip.stderr:
+            for line in pip.stderr.strip().split("\n"):
+                if line.strip():
+                    log(line)
+        try:
+            import boto3  # noqa: PLC0415
+
+            return boto3
+        except ImportError:
+            continue
+
+    raise RuntimeError(
+        "boto3 is required for S3 access checks but could not be installed. "
+        "Run: apt-get install -y python3-boto3"
+    )
+
+
+def _client_error_detail(exc: Exception) -> tuple[str, str]:
+    response = getattr(exc, "response", None) or {}
+    err = response.get("Error", {}) if isinstance(response, dict) else {}
+    code = str(err.get("Code", "") or type(exc).__name__)
+    message = str(err.get("Message", "") or exc)
+    return code, message
 
 
 def _run_aws(
@@ -549,14 +663,14 @@ def verify_s3_access(
     if not bucket:
         raise ValueError("Bucket name is required.")
 
-    aws_bin = ensure_aws_cli(log)
+    from botocore.exceptions import ClientError  # noqa: PLC0415
 
-    env = {
-        **dict(os.environ),
-        "AWS_ACCESS_KEY_ID": access_key_id,
-        "AWS_SECRET_ACCESS_KEY": secret_access_key,
-        "AWS_DEFAULT_REGION": region,
-    }
+    boto3 = _ensure_boto3(log)
+    session = boto3.Session(
+        aws_access_key_id=access_key_id,
+        aws_secret_access_key=secret_access_key,
+        region_name=region,
+    )
 
     checks: list[dict[str, Any]] = []
     bucket_region = region
@@ -580,29 +694,25 @@ def verify_s3_access(
         }
 
     try:
-        identity = json.loads(
-            _run_aws(["sts", "get-caller-identity"], env=env, log=log, aws_bin=aws_bin).stdout
-        )
+        log("$ boto3 sts.get_caller_identity()")
+        identity = session.client("sts").get_caller_identity()
         add(f"Credentials valid (account {identity.get('Account', '?')})", True)
-    except RuntimeError as exc:
+    except ClientError as exc:
         add("Credentials valid", False)
+        _code, message = _client_error_detail(exc)
         return fail(
             "AWS credentials are invalid or expired.",
-            manual=str(exc),
+            manual=message,
             retryable=True,
         )
 
+    s3 = session.client("s3", region_name=region)
     try:
-        loc_resp = json.loads(
-            _run_aws(
-                ["s3api", "get-bucket-location", "--bucket", bucket],
-                env=env,
-                log=log,
-                aws_bin=aws_bin,
-            ).stdout
-        )
+        log(f"$ boto3 s3.get_bucket_location(Bucket={bucket!r})")
+        loc_resp = s3.get_bucket_location(Bucket=bucket)
         bucket_region = _normalize_bucket_region(loc_resp.get("LocationConstraint"))
-        env["AWS_DEFAULT_REGION"] = bucket_region
+        if bucket_region != region:
+            s3 = session.client("s3", region_name=bucket_region)
         add("s3:GetBucketLocation", True)
         if bucket_region != region:
             add(f"Bucket region: {bucket_region}", True)
@@ -610,122 +720,76 @@ def verify_s3_access(
                 f"Bucket {bucket} is in {bucket_region}; "
                 f"installer had {region} — using bucket region for S3 checks."
             )
-    except RuntimeError as exc:
+    except ClientError as exc:
         add("s3:GetBucketLocation", False)
+        _code, message = _client_error_detail(exc)
         return fail(
             f"Cannot access bucket '{bucket}'.",
-            manual=str(exc) or (
+            manual=message or (
                 "Check bucket name, region, and IAM policy "
                 "(ListBucket + GetBucketLocation on the bucket ARN)."
             ),
             retryable=True,
         )
 
-    def s3_args(base: list[str]) -> list[str]:
-        return [*base, "--region", bucket_region]
-
     try:
-        _run_aws(
-            s3_args(
-                ["s3api", "list-objects-v2", "--bucket", bucket, "--max-items", "1"]
-            ),
-            env=env,
-            log=log,
-            aws_bin=aws_bin,
-        )
+        log(f"$ boto3 s3.list_objects_v2(Bucket={bucket!r}, MaxKeys=1)")
+        s3.list_objects_v2(Bucket=bucket, MaxKeys=1)
         add("s3:ListBucket", True)
-    except RuntimeError as exc:
+    except ClientError as exc:
         add("s3:ListBucket", False)
-        detail = str(exc).strip()
+        code, message = _client_error_detail(exc)
+        if code in {"AccessDenied", "403", "AllAccessDisabled"}:
+            return fail(
+                "Missing s3:ListBucket permission.",
+                manual=(
+                    f"IAM user needs s3:ListBucket on arn:aws:s3:::{bucket} (not on /*). "
+                    f"Bucket region: {bucket_region}. "
+                    f"Click Create S3 bucket again — the installer applies an inline policy "
+                    f"RumbleServerS3Access on the app user. "
+                    f"Or paste the app policy from the AWS guide (Manual tab). "
+                    f"AWS: {code}: {message}"
+                ),
+                retryable=False,
+            )
         return fail(
-            "Missing s3:ListBucket permission.",
-            manual=(
-                f"IAM user needs s3:ListBucket on arn:aws:s3:::{bucket} (not on /*). "
-                f"Bucket region: {bucket_region}. "
-                f"Click Create S3 bucket again — the installer applies an inline policy "
-                f"RumbleServerS3Access on the app user. "
-                f"Or paste the app policy from the AWS guide (Manual tab). "
-                f"AWS: {detail}"
-            ),
-            retryable=False,
+            "ListBucket check failed.",
+            manual=f"Bucket region: {bucket_region}. AWS: {code}: {message}",
+            retryable=True,
         )
 
     test_key = f".installer-test-{secrets.token_hex(8)}"
-    body_file = None
+    test_body = b"rumbleserver-installer-access-test"
     try:
-        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as tmp:
-            tmp.write("rumbleserver-installer-access-test")
-            body_file = tmp.name
-
-        _run_aws(
-            s3_args(
-                [
-                    "s3api",
-                    "put-object",
-                    "--bucket",
-                    bucket,
-                    "--key",
-                    test_key,
-                    "--body",
-                    body_file,
-                ]
-            ),
-            env=env,
-            log=log,
-            aws_bin=aws_bin,
-        )
+        log(f"$ boto3 s3.put_object(Bucket={bucket!r}, Key={test_key!r})")
+        s3.put_object(Bucket=bucket, Key=test_key, Body=test_body)
         add("s3:PutObject", True)
 
-        _run_aws(
-            s3_args(
-                [
-                    "s3api",
-                    "get-object",
-                    "--bucket",
-                    bucket,
-                    "--key",
-                    test_key,
-                    "/tmp/rumble-installer-get-test",
-                ]
-            ),
-            env=env,
-            log=log,
-            aws_bin=aws_bin,
-        )
+        log(f"$ boto3 s3.get_object(Bucket={bucket!r}, Key={test_key!r})")
+        obj = s3.get_object(Bucket=bucket, Key=test_key)
+        obj["Body"].read()
         add("s3:GetObject", True)
 
-        _run_aws(
-            s3_args(
-                ["s3api", "delete-object", "--bucket", bucket, "--key", test_key]
-            ),
-            env=env,
-            log=log,
-            aws_bin=aws_bin,
-        )
+        log(f"$ boto3 s3.delete_object(Bucket={bucket!r}, Key={test_key!r})")
+        s3.delete_object(Bucket=bucket, Key=test_key)
         add("s3:DeleteObject", True)
-    except RuntimeError as exc:
+    except ClientError as exc:
+        code, message = _client_error_detail(exc)
         if not any(c["label"] == "s3:PutObject" for c in checks):
             add("s3:PutObject", False)
         elif not any(c["label"] == "s3:GetObject" for c in checks):
             add("s3:GetObject", False)
         else:
             add("s3:DeleteObject", False)
-        _run_aws(
-            s3_args(["s3api", "delete-object", "--bucket", bucket, "--key", test_key]),
-            env=env,
-            log=log,
-            check=False,
-            aws_bin=aws_bin,
-        )
+        try:
+            s3.delete_object(Bucket=bucket, Key=test_key)
+        except ClientError:
+            pass
         return fail(
             "Missing object read/write permissions on the bucket.",
-            manual=str(exc),
+            manual=f"{code}: {message}",
             retryable=False,
         )
-    finally:
-        if body_file:
-            Path(body_file).unlink(missing_ok=True)
-        Path("/tmp/rumble-installer-get-test").unlink(missing_ok=True)
 
     return {
         "ok": True,

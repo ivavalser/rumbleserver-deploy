@@ -96,27 +96,9 @@ fi
 echo "🚀 Rumble Server — web installer"
 
 if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
-    OLD_TOKEN=""
-    [ -f "$TOKEN_FILE" ] && OLD_TOKEN="$(cat "$TOKEN_FILE")"
-    if [ -f "$URL_FILE" ]; then
-        OPEN_URL="$(cat "$URL_FILE")"
-    else
-        SERVER_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
-        OPEN_URL="http://${SERVER_IP:-127.0.0.1}:${INSTALLER_PORT}/?token=${OLD_TOKEN}"
-    fi
-    echo ""
-    echo "⚠️  Installer is already running (PID $(cat "$PID_FILE"))."
-    echo ""
-    echo "To update the installer (keep progress):"
-    echo "  kill \$(cat $PID_FILE)"
-    echo "  curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/feat/installer/installer.sh | sudo env RUMBLE_DEPLOY_BRANCH=feat/installer bash"
-    echo ""
-    echo "To start completely over:"
-    echo "  kill \$(cat $PID_FILE)"
-    echo "  rm -rf $INSTALL_DIR"
-    echo "  curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/feat/installer/installer.sh | sudo env RUMBLE_DEPLOY_BRANCH=feat/installer bash"
-    _print_installer_ready "$OPEN_URL"
-    exit 0
+    echo "🔄 Installer already running — stopping to apply updates (progress is kept)..."
+    kill "$(cat "$PID_FILE")" 2>/dev/null || true
+    sleep 1
 fi
 
 if ! command -v git &>/dev/null; then
@@ -189,8 +171,12 @@ cd "$INSTALL_DIR"
 mkdir -p backups
 
 TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
-echo "$TOKEN" > "$TOKEN_FILE"
-chmod 600 "$TOKEN_FILE"
+if [ -f "$TOKEN_FILE" ]; then
+    TOKEN="$(cat "$TOKEN_FILE")"
+else
+    echo "$TOKEN" > "$TOKEN_FILE"
+    chmod 600 "$TOKEN_FILE"
+fi
 
 if command -v ufw &>/dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
     echo "🔓 Opening port ${INSTALLER_PORT} in ufw..."
