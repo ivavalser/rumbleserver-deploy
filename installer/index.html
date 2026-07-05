@@ -40,6 +40,7 @@
     .status.info { background: rgba(59,130,246,.12); border: 1px solid rgba(59,130,246,.35); }
     .manual { background: #111827; border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; white-space: pre-wrap; margin-bottom: 16px; color: #cbd5e1; }
     .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+    .form-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0 20px; }
     button.btn { border: none; border-radius: 8px; padding: 10px 16px; font-size: 0.9rem; font-weight: 600; cursor: pointer; }
     button.primary { background: var(--accent); color: #fff; }
     button.primary:hover { background: var(--accent-hover); }
@@ -95,9 +96,9 @@
     .dns-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
     .dns-table td:first-child { color: var(--muted); width: 72px; white-space: nowrap; }
     .dns-table code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; }
-    #env-dns-status.ok, #aws-access-status.ok { color: var(--ok); }
-    #env-dns-status.fail, #aws-access-status.fail { color: var(--err); }
-    #aws-access-status, #env-dns-status { font-size: 0.85rem; margin-top: 4px; }
+    #env-dns-status.ok, #nginx-dns-status.ok, #aws-access-status.ok { color: var(--ok); }
+    #env-dns-status.fail, #nginx-dns-status.fail, #aws-access-status.fail { color: var(--err); }
+    #aws-access-status, #env-dns-status, #nginx-dns-status { font-size: 0.85rem; margin-top: 4px; }
     .link-row { margin: 10px 0; }
     .link-row a { color: var(--accent); }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -466,6 +467,12 @@
       el.className = data.ok ? 'ok' : 'fail';
       el.textContent = data.message || '';
     }
+    function renderNginxDnsStatus(data) {
+      const el = document.getElementById('nginx-dns-status');
+      if (!el || !data) return;
+      el.className = data.ok ? 'ok' : 'fail';
+      el.textContent = data.message || '';
+    }
     async function checkEnvDns() {
       const domain = document.getElementById('domain')?.value?.trim() || '';
       if (!domain) { alert(t('domainRequired')); return; }
@@ -473,6 +480,29 @@
         const data = await (await api('/api/step/env/dns-check?domain=' + encodeURIComponent(domain))).json();
         renderEnvDnsStatus(data);
       } catch (e) { alert(t('error') + ': ' + e.message); }
+    }
+    async function checkNginxDns() {
+      const domain = state?.domain || document.getElementById('nginx_domain')?.value?.trim() || '';
+      if (!domain) { alert(t('domainRequired')); return; }
+      const btn = document.getElementById('dns-check-btn');
+      if (btn) btn.disabled = true;
+      try {
+        const data = await (await api('/api/step/nginx/dns-check?domain=' + encodeURIComponent(domain))).json();
+        renderNginxDnsStatus(data);
+        if (!data.ok && data.manual) {
+          const manualEl = document.getElementById('step-manual');
+          if (manualEl) {
+            manualEl.classList.remove('hidden');
+            manualEl.textContent = (data.cwd ? '# cwd: ' + data.cwd + '\n\n' : '') + data.manual;
+          }
+        } else {
+          const manualEl = document.getElementById('step-manual');
+          if (manualEl) manualEl.classList.add('hidden');
+        }
+      } catch (e) { alert(t('error') + ': ' + e.message); }
+      finally {
+        if (btn) btn.disabled = false;
+      }
     }
 
     function fmt(str, vars) {
@@ -1111,8 +1141,11 @@
           <label><span class="field-label">${t('domainLabel')}</span><input type="text" id="nginx_domain" value="${esc(state.domain || d.domain || '')}" readonly></label>
           <label><span class="field-label">${t('certbotEmail')}</span><input type="email" id="certbot_email" autocomplete="email" placeholder="you@example.com"></label>
         </div>
-          <div class="actions" style="margin:0"><button class="btn secondary" type="button" id="dns-check-btn">${t('checkDns')}</button></div>`;
-        formEl.querySelector('#dns-check-btn').onclick = () => runAction('check', true, true);
+        <div class="form-actions">
+          <button class="btn secondary" type="button" id="dns-check-btn">${t('checkDns')}</button>
+        </div>
+        <div id="nginx-dns-status"></div>`;
+        formEl.querySelector('#dns-check-btn').onclick = () => checkNginxDns();
         return;
       }
       if (step.id === 'finish') {
