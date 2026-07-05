@@ -334,25 +334,48 @@
     .welcome-section-title { font-family: var(--font-heading); font-size: 1.15rem; color: white; margin: 0 0 14px; display: flex; align-items: center; gap: 10px; }
     .welcome-section-num { width: 28px; height: 28px; border-radius: 50%; background: var(--purple); color: #fff; font-size: 0.85rem; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
     .welcome-lead { color: rgba(255,255,255,.65); font-size: 0.9rem; line-height: 1.55; margin: 0 0 14px; }
-    .domain-cards { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+    .domain-cards { display: flex; flex-direction: column; gap: 12px; margin-bottom: 18px; }
     .domain-card {
-      display: block; text-align: left; cursor: pointer;
-      background: rgba(255,255,255,.05); border: 2px solid rgba(255,255,255,.12); border-radius: 14px;
-      padding: 14px 16px; transition: border-color .2s, background .2s;
+      display: block; text-align: left; cursor: pointer; position: relative;
+      background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); border-radius: 20px;
+      padding: 18px 20px 18px 48px; transition: border-color .2s, background .2s, box-shadow .2s;
     }
-    .domain-card:hover { background: rgba(255,255,255,.08); }
-    .domain-card.selected { border-color: rgba(110,91,233,.65); background: rgba(110,91,233,.14); }
+    .domain-card::before {
+      content: ''; position: absolute; left: 18px; top: 22px;
+      width: 18px; height: 18px; border-radius: 50%;
+      border: 2px solid rgba(255,255,255,.35); background: transparent;
+      transition: border-color .2s, background .2s, box-shadow .2s;
+    }
+    .domain-card.selected::before {
+      border-color: var(--purple-light);
+      background: var(--purple);
+      box-shadow: inset 0 0 0 3px var(--navy);
+    }
+    .domain-card:hover { background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.2); }
+    .domain-card.selected {
+      border-color: rgba(110,91,233,.55); background: rgba(110,91,233,.14);
+      box-shadow: 0 4px 20px rgba(110,91,233,.15);
+    }
     .domain-card input { position: absolute; opacity: 0; pointer-events: none; }
-    .domain-card-title { font-family: var(--font-heading); font-size: 0.92rem; font-weight: 600; color: white; margin: 0 0 6px; }
-    .domain-card-pros, .domain-card-cons { font-size: 0.8rem; line-height: 1.45; margin: 0; color: rgba(255,255,255,.55); }
-    .domain-card-pros { color: rgba(168,230,207,.85); }
-    .domain-card-cons { color: rgba(240,180,180,.75); margin-top: 4px; }
-    .welcome-instruction {
-      background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); border-radius: 14px;
-      padding: 16px 18px; margin-top: 4px;
+    .domain-card-title { font-family: var(--font-heading); font-size: 0.95rem; font-weight: 600; color: white; margin: 0 0 8px; line-height: 1.35; }
+    .domain-card-pros, .domain-card-cons {
+      font-size: 0.72rem; line-height: 1.45; margin: 0; font-style: italic;
+      color: rgba(255,255,255,.5);
     }
-    .welcome-instruction p { margin: 0 0 10px; color: rgba(255,255,255,.65); font-size: 0.85rem; line-height: 1.5; }
-    .welcome-instruction .dns-table { margin-bottom: 0; }
+    .domain-card-pros { color: rgba(168,230,207,.8); }
+    .domain-card-cons { color: rgba(240,180,180,.7); margin-top: 4px; }
+    .welcome-instruction {
+      background: linear-gradient(135deg, rgba(168,230,207,.08), rgba(110,91,233,.1));
+      border: 1px solid rgba(168,230,207,.22); border-radius: 16px;
+      padding: 18px 20px; margin-top: 4px;
+    }
+    .welcome-instruction-label {
+      display: inline-block; font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--mint); margin-bottom: 10px; font-family: var(--font-heading);
+    }
+    .welcome-instruction p { margin: 0 0 10px; color: rgba(255,255,255,.75); font-size: 0.88rem; line-height: 1.55; }
+    .welcome-instruction p:last-child { margin-bottom: 0; }
+    .welcome-instruction .dns-table { margin: 10px 0; }
     .welcome-instruction .dns-table td { border-bottom-color: rgba(255,255,255,.08); }
     .welcome-instruction label { color: rgba(255,255,255,.55); margin-top: 10px; }
     .welcome-instruction input { background: rgba(0,0,0,.25); border-color: rgba(255,255,255,.15); color: white; }
@@ -635,7 +658,10 @@
         welcomeDomainRequestTitle: 'I do not want to pay — I will request a subdomain from the RMBL Chat team',
         welcomeDomainRequestPros: 'Pros: no cost',
         welcomeDomainRequestCons: 'Cons: your server stays independent, but full decentralization is reduced — availability partly depends on RMBL Chat domain admins and possible blocking decisions',
-        welcomeDnsLead: 'At your domain registrar, create an A record pointing to this server:',
+        welcomeInstructionLabel: 'Based on your choice',
+        welcomeDnsOwnIntro: 'Suppose your domain is example.com and you want to use the subdomain chat — set up the DNS record like this:',
+        welcomeDnsOwnOutro: 'You can use any subdomain instead of chat.',
+        welcomeDnsBuyIntro: 'Suppose your domain is example.com — set up the DNS record like this:',
         welcomeSubdomainRequestLead: 'Email info@rmbl.chat with subject «rmbl server subdomain request». In the body, specify your desired subdomain name.',
         welcomeSubdomainLabel: 'Desired subdomain name',
         welcomeSendEmail: 'Send email',
@@ -834,7 +860,10 @@
         welcomeDomainRequestTitle: 'Не хочу тратить деньги — закажу поддомен у команды RMBL Chat',
         welcomeDomainRequestPros: 'Плюсы: не надо тратить деньги',
         welcomeDomainRequestCons: 'Минусы: сервер независимый, но принцип полной децентрализации уменьшается — частично доступность зависит от решений администраторов домена RMBL Chat и возможных блокировок',
-        welcomeDnsLead: 'У регистратора домена создай A-запись на этот сервер:',
+        welcomeInstructionLabel: 'В зависимости от выбора',
+        welcomeDnsOwnIntro: 'Допустим, ваш домен — example.com, и вы хотите использовать поддомен chat — тогда настройте DNS-запись так:',
+        welcomeDnsOwnOutro: 'Вместо chat можете выбрать любой другой поддомен.',
+        welcomeDnsBuyIntro: 'Допустим, ваш домен — example.com — настройте DNS-запись так:',
         welcomeSubdomainRequestLead: 'Напиши на info@rmbl.chat с темой «rmbl server subdomain request». В теле письма укажи желаемое название поддомена.',
         welcomeSubdomainLabel: 'Желаемое название поддомена',
         welcomeSendEmail: 'Отправить письмо',
@@ -1068,9 +1097,11 @@
     function renderWelcomeDnsInstruction() {
       const el = document.getElementById('welcome-domain-instruction');
       if (!el) return;
+      const label = `<span class="welcome-instruction-label">${esc(t('welcomeInstructionLabel'))}</span>`;
       if (welcomeDomainChoice === 'request') {
         el.classList.remove('hidden');
         el.innerHTML = `
+          ${label}
           <p>${esc(t('welcomeSubdomainRequestLead'))}</p>
           <label>${esc(t('welcomeSubdomainLabel'))}
             <input type="text" id="welcome-subdomain-name" placeholder="myserver.rmbl.chat">
@@ -1089,15 +1120,32 @@
         updateMailto();
         return;
       }
-      if (welcomeDomainChoice === 'own' || welcomeDomainChoice === 'buy') {
+      if (welcomeDomainChoice === 'own') {
         el.classList.remove('hidden');
         const hint = dnsHintFor('chat.example.com');
         const ip = hint.value || t('serverIpUnknown');
         el.innerHTML = `
-          <p>${esc(t('welcomeDnsLead'))}</p>
+          ${label}
+          <p>${esc(t('welcomeDnsOwnIntro'))}</p>
           <table class="dns-table">
             <tr><td>${t('dnsType')}</td><td><code>${esc(hint.type)}</code></td></tr>
             <tr><td>${t('dnsName')}</td><td><code>chat</code> <span style="color:rgba(255,255,255,.45)">→ chat.example.com</span></td></tr>
+            <tr><td>${t('dnsValue')}</td><td><code>${esc(ip)}</code> <span style="color:rgba(255,255,255,.45)">(${t('serverIp')})</span></td></tr>
+            <tr><td>${t('dnsTtl')}</td><td><code>${esc(hint.ttl)}</code></td></tr>
+          </table>
+          <p>${esc(t('welcomeDnsOwnOutro'))}</p>`;
+        return;
+      }
+      if (welcomeDomainChoice === 'buy') {
+        el.classList.remove('hidden');
+        const hint = dnsHintFor('example.com');
+        const ip = hint.value || t('serverIpUnknown');
+        el.innerHTML = `
+          ${label}
+          <p>${esc(t('welcomeDnsBuyIntro'))}</p>
+          <table class="dns-table">
+            <tr><td>${t('dnsType')}</td><td><code>${esc(hint.type)}</code></td></tr>
+            <tr><td>${t('dnsName')}</td><td><code>@</code> <span style="color:rgba(255,255,255,.45)">→ example.com</span></td></tr>
             <tr><td>${t('dnsValue')}</td><td><code>${esc(ip)}</code> <span style="color:rgba(255,255,255,.45)">(${t('serverIp')})</span></td></tr>
             <tr><td>${t('dnsTtl')}</td><td><code>${esc(hint.ttl)}</code></td></tr>
           </table>`;
