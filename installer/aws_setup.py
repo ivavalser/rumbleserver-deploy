@@ -184,6 +184,107 @@ def _run_aws(
     return proc
 
 
+def _ensure_iam_policy(
+    *,
+    policy_name: str,
+    policy_file: str,
+    env: dict[str, str],
+    log: Callable[[str], None],
+    aws_bin: str,
+) -> str:
+    """Create IAM policy or publish a new default version if it already exists."""
+    try:
+        create_policy = _run_aws(
+            [
+                "iam",
+                "create-policy",
+                "--policy-name",
+                policy_name,
+                "--policy-document",
+                f"file://{policy_file}",
+            ],
+            env=env,
+            log=log,
+            aws_bin=aws_bin,
+        )
+        policy_arn = json.loads(create_policy.stdout)["Policy"]["Arn"]
+        log(f"IAM policy {policy_name} created.")
+        return policy_arn
+    except RuntimeError as exc:
+        msg = str(exc)
+        if "EntityAlreadyExists" not in msg and "already exists" not in msg.lower():
+            raise
+        account = json.loads(
+            _run_aws(["sts", "get-caller-identity"], env=env, log=log, aws_bin=aws_bin).stdout
+        )["Account"]
+        policy_arn = f"arn:aws:iam::{account}:policy/{policy_name}"
+        log(f"IAM policy {policy_name} already exists — publishing updated document.")
+        try:
+            _run_aws(
+                [
+                    "iam",
+                    "create-policy-version",
+                    "--policy-arn",
+                    policy_arn,
+                    "--policy-document",
+                    f"file://{policy_file}",
+                    "--set-as-default",
+                ],
+                env=env,
+                log=log,
+                aws_bin=aws_bin,
+            )
+        except RuntimeError as version_exc:
+            if "LimitExceeded" in str(version_exc):
+                log("Policy version limit reached — deleting oldest non-default version.")
+                versions = json.loads(
+                    _run_aws(
+                        ["iam", "list-policy-versions", "--policy-arn", policy_arn],
+                        env=env,
+                        log=log,
+                        aws_bin=aws_bin,
+                    ).stdout
+                )["Versions"]
+                deletable = [
+                    v["VersionId"]
+                    for v in versions
+                    if not v.get("IsDefaultVersion")
+                ]
+                if deletable:
+                    _run_aws(
+                        [
+                            "iam",
+                            "delete-policy-version",
+                            "--policy-arn",
+                            policy_arn,
+                            "--version-id",
+                            sorted(deletable)[0],
+                        ],
+                        env=env,
+                        log=log,
+                        aws_bin=aws_bin,
+                    )
+                    _run_aws(
+                        [
+                            "iam",
+                            "create-policy-version",
+                            "--policy-arn",
+                            policy_arn,
+                            "--policy-document",
+                            f"file://{policy_file}",
+                            "--set-as-default",
+                        ],
+                        env=env,
+                        log=log,
+                        aws_bin=aws_bin,
+                    )
+                else:
+                    raise
+            else:
+                raise
+        return policy_arn
+
+
 def _iam_policy_document(bucket: str) -> dict[str, Any]:
     bucket_arn = f"arn:aws:s3:::{bucket}"
     objects_arn = f"arn:aws:s3:::{bucket}/*"
@@ -277,27 +378,13 @@ def provision_s3(
         policy_file = tmp.name
 
     try:
-        try:
-            create_policy = _run_aws(
-                [
-                    "iam",
-                    "create-policy",
-                    "--policy-name",
-                    policy_name,
-                    "--policy-document",
-                    f"file://{policy_file}",
-                ],
-                env=env,
-                log=log,
-                aws_bin=aws_bin,
-            )
-            policy_arn = json.loads(create_policy.stdout)["Policy"]["Arn"]
-        except RuntimeError:
-            account = json.loads(
-                _run_aws(["sts", "get-caller-identity"], env=env, log=log, aws_bin=aws_bin).stdout
-            )["Account"]
-            policy_arn = f"arn:aws:iam::{account}:policy/{policy_name}"
-            log(f"Using existing policy ARN: {policy_arn}")
+        policy_arn = _ensure_iam_policy(
+            policy_name=policy_name,
+            policy_file=policy_file,
+            env=env,
+            log=log,
+            aws_bin=aws_bin,
+        )
 
         try:
             _run_aws(["iam", "create-user", "--user-name", user_name], env=env, log=log, aws_bin=aws_bin)
@@ -320,6 +407,7 @@ def provision_s3(
             check=False,
             aws_bin=aws_bin,
         )
+        log(f"Policy attached to IAM user {user_name}.")
 
         keys = json.loads(
             _run_aws(
@@ -415,6 +503,11 @@ def verify_s3_access(
             "ok": False,
             "message": "Missing s3:ListBucket permission.",
             "checks": checks,
+            "manual": (
+                f"IAM policy must allow s3:ListBucket on arn:aws:s3:::{bucket} "
+                "(bucket ARN, not /*). If you re-ran auto-setup before, update the "
+                "RumbleServerS3 policy in IAM or run Create bucket again."
+            ),
         }
 
     test_key = f".installer-test-{secrets.token_hex(8)}"

@@ -63,6 +63,10 @@
       "Effect": "Allow",
       "Action": [
         "iam:CreatePolicy",
+        "iam:CreatePolicyVersion",
+        "iam:SetDefaultPolicyVersion",
+        "iam:ListPolicyVersions",
+        "iam:DeletePolicyVersion",
         "iam:CreateUser",
         "iam:AttachUserPolicy",
         "iam:CreateAccessKey"
@@ -134,8 +138,14 @@
     }
   ]
 }</pre>
-  <p>Bucket-level actions (<code>ListBucket</code>, <code>GetBucketLocation</code>) go on <code>arn:aws:s3:::bucket-name</code>. Object actions go on <code>arn:aws:s3:::bucket-name/*</code>. For several servers/buckets, add more ARNs to each <code>Resource</code> array (as in a shared app user policy).</p>
+  <p>Bucket-level actions (<code>ListBucket</code>, <code>GetBucketLocation</code>) go on <code>arn:aws:s3:::bucket-name</code> — <strong>without</strong> <code>/*</code>. Object actions go on <code>arn:aws:s3:::bucket-name/*</code>. Putting <code>ListBucket</code> only on the <code>/*</code> ARN is a common mistake and causes exactly <em>GetBucketLocation ✓ / ListBucket ✗</em> in the installer.</p>
+  <p>For several servers/buckets, add more ARNs to each <code>Resource</code> array (as in a shared app user policy).</p>
   <p>Name: <code>RumbleServerS3-YOUR_BUCKET_NAME</code> → Create policy.</p>
+
+  <div class="warn">
+    <strong>ListBucket fails but GetBucketLocation works?</strong><br>
+    Open IAM → Policies → <code>RumbleServerS3-…</code> → verify JSON matches the template above (especially <code>s3:ListBucket</code> on the bucket ARN). If you used automatic setup before, run <em>Create S3 bucket &amp; IAM user</em> again — the installer now updates an existing policy instead of silently reusing an old one.
+  </div>
 
   <h2>5. Create IAM user for the app</h2>
   <ol>
