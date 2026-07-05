@@ -1039,6 +1039,7 @@
     function formStepsSet() {
       const steps = new Set(['ghcr', 'env', 'aws', 'superuser', 'nginx']);
       if (state?.ghcr_key_set) steps.delete('ghcr');
+      if (state?.domain) steps.delete('env');
       return steps;
     }
 
@@ -2375,10 +2376,6 @@
       }
     }
 
-    function envMode() {
-      return document.querySelector('input[name="env_mode"]:checked')?.value || 'simple';
-    }
-
     function awsSetupMode() {
       return document.querySelector('input[name="aws_setup_mode"]:checked')?.value || 'auto';
     }
@@ -2485,15 +2482,27 @@
       ).join('');
     }
 
+    function envMode() {
+      return document.querySelector('input[name="env_mode"]:checked')?.value
+        || state?.defaults?.env_mode
+        || 'simple';
+    }
+
     function collectPayload(stepId) {
       const g = id => document.getElementById(id);
-      if (stepId === 'ghcr') return { ghcr_key: g('ghcr_key')?.value || '', ghcr_user: g('ghcr_user')?.value || 'rmbldeploy' };
+      if (stepId === 'ghcr') {
+        return {
+          ghcr_key: g('ghcr_key')?.value || '',
+          ghcr_user: g('ghcr_user')?.value || state?.defaults?.ghcr_user || 'rmbldeploy',
+        };
+      }
       if (stepId === 'env') {
+        const presetDomain = (state?.domain || state?.defaults?.domain || '').trim();
         const mode = envMode();
         const base = {
           env_mode: mode,
-          domain: g('domain')?.value || '',
-          allowed_hosts: g('allowed_hosts')?.value || '',
+          domain: (g('domain')?.value || presetDomain).trim(),
+          allowed_hosts: (g('allowed_hosts')?.value || presetDomain || state?.defaults?.allowed_hosts || '').trim(),
         };
         if (mode === 'advanced') {
           return {

@@ -1017,6 +1017,10 @@ def check_env(ctx: InstallerContext) -> StepResult:
 def apply_env(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
     merged = _default_env_payload(ctx)
     merged.update(payload)
+    if not (merged.get("domain") or "").strip():
+        merged["domain"] = (ctx.get("domain") or "").strip()
+    if not (merged.get("allowed_hosts") or "").strip() and merged.get("domain"):
+        merged["allowed_hosts"] = merged["domain"]
     env_mode = merged.get("env_mode") or "simple"
     merged["env_mode"] = env_mode
 
