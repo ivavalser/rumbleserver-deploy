@@ -144,6 +144,9 @@
         "iam:ListPolicyVersions",
         "iam:DeletePolicyVersion",
         "iam:CreateUser",
+        "iam:PutUserPolicy",
+        "iam:GetUserPolicy",
+        "iam:DeleteUserPolicy",
         "iam:AttachUserPolicy",
         "iam:CreateAccessKey",
         "iam:ListAccessKeys",
@@ -176,7 +179,7 @@
     </div>
 
     <div class="warn">
-      <strong>Re-running auto setup?</strong> The installer updates an existing app policy and, if the app IAM user already has 2 access keys, deletes the oldest inactive (or oldest active) key before creating a new one. Bootstrap policy must include <code>iam:ListAccessKeys</code> and <code>iam:DeleteAccessKey</code> (see JSON above).
+      <strong>Re-running auto setup?</strong> The installer overwrites inline policy <code>RumbleServerS3Access</code> on the app user (always includes <code>ListBucket</code>), rotates access keys if needed, and updates the managed policy when bootstrap permissions allow.
     </div>
 
     <h2>2. In the installer</h2>

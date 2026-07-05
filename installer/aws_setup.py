@@ -457,6 +457,7 @@ def provision_s3(
     )
 
     policy_name = f"RumbleServerS3-{bucket}"[:128]
+    inline_policy_name = "RumbleServerS3Access"
     user_name = f"rumbleserver-s3-{bucket}"[:64]
     policy_doc = _iam_policy_document(bucket)
 
@@ -465,14 +466,6 @@ def provision_s3(
         policy_file = tmp.name
 
     try:
-        policy_arn = _ensure_iam_policy(
-            policy_name=policy_name,
-            policy_file=policy_file,
-            env=env,
-            log=log,
-            aws_bin=aws_bin,
-        )
-
         try:
             _run_aws(["iam", "create-user", "--user-name", user_name], env=env, log=log, aws_bin=aws_bin)
         except RuntimeError as exc:
@@ -480,20 +473,49 @@ def provision_s3(
                 raise
             log(f"IAM user {user_name} already exists.")
 
+        # Inline policy is overwritten on every run — fixes stale managed policies missing ListBucket.
         _run_aws(
             [
                 "iam",
-                "attach-user-policy",
+                "put-user-policy",
                 "--user-name",
                 user_name,
-                "--policy-arn",
-                policy_arn,
+                "--policy-name",
+                inline_policy_name,
+                "--policy-document",
+                f"file://{policy_file}",
             ],
             env=env,
             log=log,
             aws_bin=aws_bin,
         )
-        log(f"Policy attached to IAM user {user_name}.")
+        log(f"Inline IAM policy {inline_policy_name} applied to {user_name}.")
+
+        # Managed policy (optional, for visibility in IAM → Policies list).
+        try:
+            policy_arn = _ensure_iam_policy(
+                policy_name=policy_name,
+                policy_file=policy_file,
+                env=env,
+                log=log,
+                aws_bin=aws_bin,
+            )
+            _run_aws(
+                [
+                    "iam",
+                    "attach-user-policy",
+                    "--user-name",
+                    user_name,
+                    "--policy-arn",
+                    policy_arn,
+                ],
+                env=env,
+                log=log,
+                check=False,
+                aws_bin=aws_bin,
+            )
+        except RuntimeError as exc:
+            log(f"Managed policy attach skipped: {exc}")
 
         key_pair = _ensure_user_access_key(
             user_name,
@@ -618,9 +640,11 @@ def verify_s3_access(
         return fail(
             "Missing s3:ListBucket permission.",
             manual=(
-                f"IAM policy must allow s3:ListBucket on arn:aws:s3:::{bucket} "
-                f"(bucket ARN, not /*). Bucket region: {bucket_region}. "
-                f"Re-run Create S3 bucket to refresh the policy, or fix JSON in IAM. "
+                f"IAM user needs s3:ListBucket on arn:aws:s3:::{bucket} (not on /*). "
+                f"Bucket region: {bucket_region}. "
+                f"Click Create S3 bucket again — the installer applies an inline policy "
+                f"RumbleServerS3Access on the app user. "
+                f"Or paste the app policy from the AWS guide (Manual tab). "
                 f"AWS: {detail}"
             ),
             retryable=False,
