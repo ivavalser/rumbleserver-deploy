@@ -219,28 +219,39 @@
     .shutdown-card img { width: 120px; height: 120px; margin-bottom: 20px; }
     .shutdown-card h2 { margin: 0 0 8px; color: var(--navy); font-size: 1.5rem; }
     .shutdown-card p { margin: 0; color: var(--muted); line-height: 1.5; }
-    .hero { position: relative; min-height: 55vh; display: flex; align-items: center; padding: 80px 0 40px; overflow: hidden; }
+    .hero { position: relative; min-height: auto; display: flex; align-items: center; padding: 56px 0 28px; overflow: hidden; }
     .hero-bg-shapes { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
     .hero-shape { position: absolute; border-radius: 50%; opacity: 0.08; filter: blur(100px); }
     .hero-shape-1 { width: 600px; height: 600px; background: var(--purple); top: -200px; right: -100px; }
     .hero-shape-2 { width: 400px; height: 400px; background: var(--mint); bottom: -100px; left: -100px; }
     .hero-shape-3 { width: 300px; height: 300px; background: var(--purple-light); top: 50%; left: 40%; }
-    .hero-content { max-width: 1100px; margin: 0 auto; padding: 0 32px; display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 48px; position: relative; z-index: 1; width: 100%; }
-    .hero-headline { font-family: var(--font-heading); font-size: clamp(36px, 5vw, 56px); font-weight: 700; color: white; letter-spacing: -0.03em; line-height: 1.08; margin: 0; white-space: pre-line; }
-    .hero-sub { font-size: clamp(15px, 2vw, 18px); color: rgba(255,255,255,.65); line-height: 1.6; max-width: 460px; margin: 16px 0 0; }
+    .hero-content { max-width: 960px; margin: 0 auto; padding: 0 32px; display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 32px; position: relative; z-index: 1; width: 100%; }
+    .hero-headline { font-family: var(--font-heading); font-size: clamp(28px, 4vw, 42px); font-weight: 700; color: white; letter-spacing: -0.03em; line-height: 1.1; margin: 0; white-space: pre-line; }
+    .hero-sub { font-size: clamp(14px, 1.8vw, 16px); color: rgba(255,255,255,.65); line-height: 1.55; max-width: 420px; margin: 12px 0 0; }
     .hero-mascot { position: relative; display: flex; justify-content: center; }
     .hero-mascot-glow { position: absolute; width: 70%; height: 70%; border-radius: 50%; background: radial-gradient(circle, rgba(110,91,233,.25), transparent 70%); filter: blur(40px); }
-    .hero-mascot-figure { position: relative; max-width: 380px; margin: 0; animation: mascotFloat 6s ease-in-out infinite; }
+    .hero-mascot-figure { position: relative; max-width: 260px; margin: 0; animation: mascotFloat 6s ease-in-out infinite; }
     .hero-mascot-img { width: 100%; height: auto; display: block; }
     .hero-mascot-bubble { position: absolute; left: 63%; top: 18%; transform: translate(-50%,-50%) rotate(-21deg); font-weight: 600; color: var(--navy); white-space: nowrap; font-family: var(--font-heading); font-size: 0.95rem; }
     @keyframes mascotFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
-    .start-modes { max-width: 900px; margin: 0 auto; padding: 0 32px 64px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; position: relative; z-index: 1; }
-    @media (max-width: 768px) { .hero-content { grid-template-columns: 1fr; text-align: center; } .hero-mascot { order: -1; } .hero-mascot-figure { max-width: 240px; } .start-modes { grid-template-columns: 1fr; } }
-    .mode-card { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); border-radius: 20px; padding: 28px; display: flex; flex-direction: column; gap: 12px; }
+    .start-modes { max-width: 900px; margin: 0 auto; padding: 8px 32px 48px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; position: relative; z-index: 1; }
+    @media (max-width: 768px) { .hero-content { grid-template-columns: 1fr; text-align: center; } .hero-mascot { order: -1; } .hero-mascot-figure { max-width: 200px; } .hero-sub { margin-left: auto; margin-right: auto; } .start-modes { grid-template-columns: 1fr; } }
+    .mode-card { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 12px; }
     .mode-card.recommended { border-color: rgba(110,91,233,.5); background: rgba(110,91,233,.12); }
-    .mode-card h3 { margin: 0; color: white; font-size: 1.15rem; font-family: var(--font-heading); }
-    .mode-card p { margin: 0; color: rgba(255,255,255,.6); font-size: 0.9rem; line-height: 1.5; flex: 1; }
+    .mode-card h3 { margin: 0; color: white; font-size: 1.05rem; font-family: var(--font-heading); }
+    .mode-card p { margin: 0; color: rgba(255,255,255,.6); font-size: 0.88rem; line-height: 1.5; flex: 1; }
     .mode-card .tag { display: inline-block; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--mint); margin-bottom: 4px; }
+    .mode-card .btn-primary,
+    .mode-card .btn-secondary-light { width: 100%; margin-top: 4px; }
+    .btn-primary {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 14px 28px; background: var(--purple); color: white; border: none; border-radius: 14px;
+      font-family: var(--font-heading); font-size: 16px; font-weight: 600; cursor: pointer;
+      box-shadow: 0 4px 16px rgba(110, 91, 233, 0.3);
+      transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+    }
+    .btn-primary:hover { background: var(--purple-light); transform: translateY(-2px); box-shadow: 0 6px 24px rgba(110, 91, 233, 0.4); }
+    .btn-primary:active { transform: translateY(0); }
     .btn-shimmer {
       position: relative; overflow: hidden; isolation: isolate;
       background: linear-gradient(120deg, var(--purple-dark), var(--purple) 40%, var(--purple-light) 60%, var(--purple));
@@ -253,9 +264,6 @@
       font-family: var(--font-heading); font-size: 16px; font-weight: 600; cursor: pointer; transition: background .2s, transform .15s;
     }
     .btn-secondary-light:hover { background: rgba(255,255,255,.14); transform: translateY(-2px); }
-    .start-resume { text-align: center; padding: 0 32px 48px; position: relative; z-index: 1; }
-    .start-resume button { background: transparent; border: 1px solid rgba(255,255,255,.25); color: rgba(255,255,255,.7); padding: 10px 20px; border-radius: 10px; cursor: pointer; font-family: var(--font-heading); font-size: 0.9rem; }
-    .start-resume button:hover { background: rgba(255,255,255,.08); color: white; }
     .start-lang { position: absolute; top: 20px; right: 24px; z-index: 10; }
     .start-lang .lang-switch { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.15); }
     .start-lang .lang-switch button { color: rgba(255,255,255,.6); }
@@ -302,9 +310,6 @@
         <p id="start-manual-desc"></p>
         <button type="button" class="btn-secondary-light" id="start-manual-btn"></button>
       </div>
-    </div>
-    <div class="start-resume hidden" id="start-resume-wrap">
-      <button type="button" id="start-resume-btn"></button>
     </div>
   </div>
 
@@ -709,11 +714,8 @@
       document.getElementById('start-manual-title').textContent = t('startManualTitle');
       document.getElementById('start-manual-desc').textContent = t('startManualDesc');
       document.getElementById('start-manual-btn').textContent = t('startManualBtn');
-      document.getElementById('start-resume-btn').textContent = t('startResume');
       document.getElementById('start-lang-en').classList.toggle('active', lang === 'en');
       document.getElementById('start-lang-ru').classList.toggle('active', lang === 'ru');
-      const hasProgress = state?.steps?.some(s => s.status === 'done');
-      document.getElementById('start-resume-wrap').classList.toggle('hidden', !hasProgress);
     }
 
     async function setInstallMode(mode) {
@@ -1349,17 +1351,6 @@
     document.getElementById('start-lang-ru').onclick = () => setLang('ru');
     document.getElementById('start-auto-btn').onclick = () => setInstallMode('auto');
     document.getElementById('start-manual-btn').onclick = () => setInstallMode('manual');
-    document.getElementById('start-resume-btn').onclick = async () => {
-      if (!state.install_started) {
-        await api('/api/mode', { method: 'POST', body: JSON.stringify({ mode: 'manual' }) });
-        state.install_started = true;
-        state.install_mode = 'manual';
-      }
-      showScreen('wizard');
-      updateModeBadge();
-      await refreshState(true);
-      if (state?.install_mode === 'auto' && !autoPaused) runAutoFlow();
-    };
 
     function api(path, options = {}) {
       const url = new URL(path, location.origin);
