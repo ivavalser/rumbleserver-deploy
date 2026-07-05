@@ -29,10 +29,12 @@ from steps import (  # noqa: E402
     _default_env_payload,
     check_aws_access,
     check_dns,
+    check_preflight,
     dns_setup_hint,
     generate_admin_password,
     get_server_public_ip,
     invalidate_step_check_cache,
+    save_preflight,
     save_step_check_cache,
     step_statuses,
 )
@@ -182,6 +184,8 @@ class InstallerHandler(BaseHTTPRequestHandler):
                         "admin_username": self.ctx.get("admin_username", ""),
                         "install_mode": self.ctx.get("install_mode", ""),
                         "install_started": bool(self.ctx.get("install_started")),
+                        "preflight_done": bool(self.ctx.get("preflight_done")),
+                        "ghcr_key_set": bool(self.ctx.get("ghcr_key")),
                         "auto_paused": bool(self.ctx.get("auto_paused")),
                     },
                 )
@@ -369,6 +373,40 @@ class InstallerHandler(BaseHTTPRequestHandler):
                         "manual": "Open /aws-guide.html for manual setup instructions.",
                     },
                 )
+            return
+
+        if path == "/api/preflight/check":
+            if not self._require_auth():
+                return
+            payload = self._read_json()
+            with STATE_LOCK:
+                result = check_preflight(self.ctx, payload)
+            self._json_response(
+                HTTPStatus.OK,
+                {
+                    "ok": result.ok,
+                    "message": result.message,
+                    "manual": result.manual,
+                    "data": result.data,
+                },
+            )
+            return
+
+        if path == "/api/preflight/save":
+            if not self._require_auth():
+                return
+            payload = self._read_json()
+            with STATE_LOCK:
+                result = save_preflight(self.ctx, payload)
+            self._json_response(
+                HTTPStatus.OK,
+                {
+                    "ok": result.ok,
+                    "message": result.message,
+                    "manual": result.manual,
+                    "data": result.data,
+                },
+            )
             return
 
         if path == "/api/mode":

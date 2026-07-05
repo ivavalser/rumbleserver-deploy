@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -411,6 +412,137 @@ def apply_awscli(ctx: InstallerContext, _payload: dict[str, Any]) -> StepResult:
     version = ctx.run([path, "--version"], check=False)
     line = version.stdout.strip() or f"AWS CLI installed: {path}"
     return _ok(f"{line}; boto3 ready")
+
+
+GHCR_REGISTRY = "ghcr.io"
+GHCR_IMAGE = "ivavalser/rumbleserver"
+GHCR_DEFAULT_USER = "rmbldeploy"
+
+
+def check_ghcr_key_remote(
+    user: str,
+    key: str,
+    *,
+    tag: str = "stable",
+) -> StepResult:
+    """Verify GHCR credentials without Docker (preflight)."""
+    user = (user or GHCR_DEFAULT_USER).strip()
+    key = (key or "").strip()
+    if not key:
+        return _fail("Enter the image access key.")
+
+    token_url = (
+        f"https://{GHCR_REGISTRY}/token"
+        f"?service={GHCR_REGISTRY}&scope=repository:{GHCR_IMAGE}:pull"
+    )
+    auth = base64.b64encode(f"{user}:{key}".encode()).decode()
+    req = urllib.request.Request(token_url, headers={"Authorization": f"Basic {auth}"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            token_payload = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403):
+            return _fail(
+                "Invalid GHCR access key — check the key from the RMBL Chat team.",
+            )
+        return _fail(f"GHCR auth failed (HTTP {exc.code}).")
+    except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
+        return _fail(f"Could not reach GHCR: {exc}")
+
+    bearer = token_payload.get("token") or token_payload.get("access_token") or ""
+    if not bearer:
+        return _fail("GHCR returned an empty token.")
+
+    manifest_url = f"https://{GHCR_REGISTRY}/v2/{GHCR_IMAGE}/manifests/{tag}"
+    manifest_req = urllib.request.Request(
+        manifest_url,
+        method="HEAD",
+        headers={
+            "Authorization": f"Bearer {bearer}",
+            "Accept": "application/vnd.docker.distribution.manifest.v2+json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(manifest_req, timeout=20):
+            pass
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403):
+            return _fail(
+                "Key is valid but cannot pull the server image — contact the RMBL Chat team.",
+            )
+        if exc.code == 404:
+            return _fail(f"Image tag '{tag}' not found in the registry.")
+        return _fail(f"Image pull check failed (HTTP {exc.code}).")
+    except (urllib.error.URLError, OSError) as exc:
+        return _fail(f"Could not verify image access: {exc}")
+
+    return _ok(f"GHCR key is valid for {GHCR_REGISTRY}/{GHCR_IMAGE}:{tag}.")
+
+
+def check_preflight(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
+    domain = (payload.get("domain") or ctx.get("domain") or "").strip()
+    key = (payload.get("ghcr_key") or ctx.get("ghcr_key") or "").strip()
+    user = (payload.get("ghcr_user") or ctx.get("ghcr_user") or GHCR_DEFAULT_USER).strip()
+
+    checks: list[dict[str, Any]] = []
+    dns_result = check_dns(ctx, domain=domain or None)
+    checks.append(
+        {
+            "id": "dns",
+            "label": "DNS",
+            "ok": dns_result.ok,
+            "message": dns_result.message,
+            "manual": dns_result.manual,
+        }
+    )
+
+    ghcr_result = check_ghcr_key_remote(user, key)
+    checks.append(
+        {
+            "id": "ghcr",
+            "label": "GHCR key",
+            "ok": ghcr_result.ok,
+            "message": ghcr_result.message,
+            "manual": ghcr_result.manual,
+        }
+    )
+
+    all_ok = all(c["ok"] for c in checks)
+    message = "All checks passed — you can start installation." if all_ok else "Fix the issues below and check again."
+    return StepResult(
+        ok=all_ok,
+        message=message,
+        data={"checks": checks},
+    )
+
+
+def save_preflight(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
+    domain = (payload.get("domain") or "").strip()
+    key = (payload.get("ghcr_key") or "").strip()
+    user = (payload.get("ghcr_user") or GHCR_DEFAULT_USER).strip()
+
+    if not domain:
+        return _fail("Enter the server domain.")
+    if not key:
+        return _fail("Enter the GHCR access key.")
+
+    verify = check_preflight(ctx, {"domain": domain, "ghcr_key": key, "ghcr_user": user})
+    if not verify.ok:
+        return verify
+
+    ctx.update(
+        {
+            "domain": domain,
+            "allowed_hosts": domain,
+            "ghcr_key": key,
+            "ghcr_user": user,
+            "preflight_done": True,
+        }
+    )
+    return _ok(
+        "Domain and access key saved.",
+        domain=domain,
+    )
 
 
 def check_ghcr(ctx: InstallerContext) -> StepResult:
