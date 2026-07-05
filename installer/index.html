@@ -188,10 +188,12 @@
     .aws-busy-overlay img { width: 80px; height: 80px; }
     .panel.aws-step-locked .actions button { pointer-events: none; opacity: 0.55; }
     #step-panel { position: relative; }
+    .step-hero { position: relative; z-index: 20; }
+    .step-body { position: relative; min-height: 140px; }
     .step-busy-overlay {
       position: absolute; inset: 0; z-index: 15; display: flex; flex-direction: column;
       align-items: center; justify-content: flex-start; padding: 48px 32px 32px; gap: 14px;
-      background: rgba(19,19,31,.9); border-radius: 20px; color: var(--text);
+      background: rgba(19,19,31,.9); border-radius: 0 0 20px 20px; color: var(--text);
       font-size: 0.92rem; font-weight: 600; cursor: wait;
     }
     .step-busy-overlay img { width: 96px; height: 96px; animation: mascotFloat 6s ease-in-out infinite; }
@@ -368,15 +370,19 @@
     </aside>
     <main>
       <section class="panel" id="step-panel">
-        <div id="mascot-tip" class="mascot-tip hidden"></div>
-        <div id="done-badge" class="done-badge hidden"></div>
-        <h2 id="step-title">Loading</h2>
-        <p class="desc" id="step-desc"></p>
-        <div id="step-busy-overlay" class="step-busy-overlay hidden" aria-live="polite"></div>
-        <div id="step-status" class="status info hidden"></div>
-        <div id="step-manual" class="manual hidden"></div>
-        <div id="step-form" class="hidden"></div>
-        <div class="actions" id="step-actions"></div>
+        <div class="step-hero">
+          <div id="mascot-tip" class="mascot-tip hidden"></div>
+          <div id="done-badge" class="done-badge hidden"></div>
+          <h2 id="step-title">Loading</h2>
+          <p class="desc" id="step-desc"></p>
+        </div>
+        <div class="step-body">
+          <div id="step-busy-overlay" class="step-busy-overlay hidden" aria-live="polite"></div>
+          <div id="step-status" class="status info hidden"></div>
+          <div id="step-manual" class="manual hidden"></div>
+          <div id="step-form" class="hidden"></div>
+          <div class="actions" id="step-actions"></div>
+        </div>
       </section>
       <section class="panel">
         <h3 id="log-title">Log</h3>
