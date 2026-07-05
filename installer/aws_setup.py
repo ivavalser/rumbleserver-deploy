@@ -54,8 +54,19 @@ def _aws_cli_version_line(aws_bin: str) -> str:
     return (proc.stdout or proc.stderr or "").strip()
 
 
+def _is_official_aws_cli_v2(aws_bin: str) -> bool:
+    try:
+        resolved = Path(aws_bin).resolve()
+    except OSError:
+        resolved = Path(aws_bin)
+    path = str(resolved)
+    return path == "/usr/local/bin/aws" or path.startswith("/usr/local/aws-cli/")
+
+
 def _needs_official_aws_cli_v2(aws_bin: str) -> bool:
-    """apt/pip awscli on Python 3.14 breaks many subcommands (argparse % in help)."""
+    """Distro apt/pip awscli on Python 3.14 breaks many subcommands; official v2 bundle is OK."""
+    if _is_official_aws_cli_v2(aws_bin):
+        return False
     return "Python/3.14" in _aws_cli_version_line(aws_bin)
 
 

@@ -706,8 +706,8 @@
       return fetch(url, { ...options, headers });
     }
 
-    async function refreshState() {
-      if (isAwsStepBusy()) return;
+    async function refreshState(force = false) {
+      if (!force && isAwsStepBusy()) return;
       const res = await api('/api/state');
       if (!res.ok) throw new Error(t('error'));
       state = await res.json();
@@ -1109,7 +1109,7 @@
       const idx = state.steps.findIndex(s => s.id === currentStepId);
       if (idx < 0 || idx >= state.steps.length - 1) return;
       const step = state.steps[idx];
-      if (action === 'skip' || step.status === 'done') {
+      if (action === 'skip' || step.status === 'done' || action === 'apply' || action === 'check') {
         currentStepId = state.steps[idx + 1].id;
         lastFormStepId = null;
         renderStepList();
@@ -1163,7 +1163,7 @@
           }
         }
         showActionResult(data, silent);
-        await refreshState();
+        await refreshState(true);
         advanceToNextStep(action, data);
       } catch (e) { if (!silent) alert(t('error') + ': ' + e.message); }
       finally {
