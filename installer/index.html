@@ -228,7 +228,7 @@
     /* Start screen */
     #screen-start { min-height: 100vh; background: var(--navy); position: relative; overflow: hidden; }
     #screen-wizard { min-height: 100vh; background: var(--bg); }
-    #screen-shutdown { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg); padding: 24px; }
+    #screen-shutdown, #screen-loading { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg); padding: 24px; }
     .shutdown-card { text-align: center; max-width: 480px; padding: 40px; background: var(--surface); border-radius: 24px; border: 1px solid var(--border); box-shadow: 0 12px 40px rgba(0,0,0,.35); }
     .shutdown-card img { width: 120px; height: 120px; margin-bottom: 20px; }
     .shutdown-card h2 { margin: 0 0 8px; color: var(--text); font-size: 1.5rem; }
@@ -378,6 +378,14 @@
     </div>
   </div>
 
+  <div id="screen-loading">
+    <div class="shutdown-card">
+      <img src="/assets/mascot-4-build-anim.svg" alt="" style="animation: mascotFloat 6s ease-in-out infinite">
+      <h2 id="loading-title">Connecting…</h2>
+      <p id="loading-desc"></p>
+    </div>
+  </div>
+
   <script>
     const UI = {
       en: {
@@ -402,6 +410,10 @@
         shutdownDesc: 'The installer has shut down. Your RMBL server keeps running — you can close this tab.',
         noToken: 'Token required in URL: ?token=...',
         error: 'Error',
+        loadingConnect: 'Connecting to the installer…',
+        loadingBusy: 'A step is still running on the server',
+        loadingBusyDesc: 'The installer is busy — waiting for it to finish. The page will refresh automatically.',
+        loadingRetry: 'Cannot reach the installer — retrying…',
         mascotSays: 'Rumble says',
         modeAuto: 'Auto mode',
         modeManual: 'Step-by-step',
@@ -548,6 +560,10 @@
         shutdownDesc: 'Установщик выключен. RMBL-сервер продолжает работать — вкладку можно закрыть.',
         noToken: 'Нужен token в URL: ?token=...',
         error: 'Ошибка',
+        loadingConnect: 'Подключаюсь к установщику…',
+        loadingBusy: 'На сервере ещё выполняется шаг',
+        loadingBusyDesc: 'Установщик занят — жду завершения. Страница обновится автоматически.',
+        loadingRetry: 'Не могу достучаться до установщика — повторяю…',
         mascotSays: 'Rumble говорит',
         modeAuto: 'Авто-режим',
         modeManual: 'Пошагово',
@@ -705,6 +721,7 @@
 
     const FORM_STEPS = new Set(['ghcr', 'env', 'aws', 'superuser', 'nginx']);
     const BUILD_MASCOT_STEPS = new Set(['deploy', 'nginx']);
+    const SKIP_ALLOWED_STEPS = new Set(['system', 'ufw', 'awscli', 'aws', 'superuser', 'nginx']);
 
     let lang = localStorage.getItem('installer_lang') || 'en';
     const params = new URLSearchParams(location.search);
@@ -738,6 +755,12 @@
       document.getElementById('screen-start').classList.toggle('hidden', name !== 'start');
       document.getElementById('screen-wizard').classList.toggle('hidden', name !== 'wizard');
       document.getElementById('screen-shutdown').classList.toggle('hidden', name !== 'shutdown');
+      document.getElementById('screen-loading').classList.toggle('hidden', name !== 'loading');
+    }
+
+    function setLoadingScreen(title, desc) {
+      document.getElementById('loading-title').textContent = title;
+      document.getElementById('loading-desc').textContent = desc || '';
     }
 
     function renderStartScreen() {
@@ -1237,11 +1260,46 @@
         applyAwsBucketRegion(data);
         renderAwsAccessResult(data, { showFailure: true });
         renderAwsVerifyProgress([]);
+        if (data.ok && state?.install_mode === 'auto' && !autoPaused) {
+          setAwsFormBusy(null);
+          await finalizeAwsStepAfterVerify(data);
+          return;
+        }
       } catch (e) {
         alert(t('error') + ': ' + e.message);
       } finally {
         setAwsFormBusy(null);
         busy = false;
+        renderCurrentStep();
+      }
+    }
+
+    async function finalizeAwsStepAfterVerify(verifyData) {
+      if (!verifyData?.ok || currentStepId !== 'aws') return;
+      busy = true;
+      busyAction = 'apply';
+      syncAwsFormButtons();
+      try {
+        const res = await api('/api/step/aws/apply', {
+          method: 'POST',
+          body: JSON.stringify(collectPayload('aws')),
+        });
+        const data = await res.json();
+        showActionResult(
+          data.ok
+            ? { ok: true, message: t('awsSavedVerified'), data: { checks: verifyData.data?.checks || data.data?.checks } }
+            : data,
+          false,
+        );
+        await refreshState(true);
+        if (data.ok) advanceToNextStep('apply', { ok: true, message: data.message });
+      } catch (e) {
+        alert(t('error') + ': ' + e.message);
+      } finally {
+        busy = false;
+        busyAction = null;
+        awsOperation = null;
+        syncAwsFormButtons();
         renderCurrentStep();
       }
     }
@@ -1418,13 +1476,19 @@
       if (!force && isAwsStepBusy()) return;
       const res = await api('/api/state');
       if (!res.ok) throw new Error(t('error'));
-      state = await res.json();
+      const data = await res.json();
+      if (data.busy) {
+        // Долгий шаг держит сервер — state недоступен, не затираем текущий
+        return data;
+      }
+      state = data;
       autoPaused = !!state.auto_paused;
       document.getElementById('install-dir').textContent = t('directory') + ': ' + state.install_dir;
       if (!currentStepId) currentStepId = state.current_step;
       updateModeBadge();
       renderStepList();
       if (!document.getElementById('screen-wizard').classList.contains('hidden')) renderCurrentStep();
+      return state;
     }
 
     async function pollLog() {
@@ -1771,12 +1835,17 @@
             retryDelayMs: 8000,
           });
           if (verifyData.ok) {
-            showActionResult({
-              ok: true,
-              message: t('awsSavedVerified'),
-              data: { checks: verifyData.data?.checks },
-            }, false);
-            await refreshState();
+            setAwsFormBusy(null);
+            if (state?.install_mode === 'auto' && !autoPaused) {
+              await finalizeAwsStepAfterVerify(verifyData);
+            } else {
+              showActionResult({
+                ok: true,
+                message: t('awsSavedVerified'),
+                data: { checks: verifyData.data?.checks },
+              }, false);
+              await refreshState(true);
+            }
           } else {
             showActionResult(verifyData, false);
           }
@@ -1874,7 +1943,9 @@
       if (step.status !== 'done') {
         actions.appendChild(mkBtn(t('runAuto'), 'primary', () => runAction('apply')));
         actions.appendChild(mkBtn(t('verify'), 'secondary', () => runAction('check')));
-        actions.appendChild(mkBtn(t('skip'), 'secondary', () => runAction('skip')));
+        if (SKIP_ALLOWED_STEPS.has(step.id)) {
+          actions.appendChild(mkBtn(t('skip'), 'secondary', () => runAction('skip')));
+        }
       }
       if (step.status === 'done') {
         actions.appendChild(mkBtn(t('recheck'), 'secondary', () => runAction('check')));
@@ -2034,27 +2105,37 @@
 
     async function init() {
       setLang(lang);
+      showScreen('loading');
+      setLoadingScreen(t('loadingConnect'), '');
       if (!TOKEN) {
-        showScreen('start');
-        document.getElementById('screen-start').innerHTML = '<div style="padding:40px;color:#c0392b;text-align:center">' + t('noToken') + '</div>';
+        document.getElementById('screen-loading').innerHTML = '<div style="padding:40px;color:#f08080;text-align:center">' + esc(t('noToken')) + '</div>';
         return;
       }
-      try {
-        await refreshState();
-        if (state.install_started) {
-          showScreen('wizard');
-          updateModeBadge();
-          if (state.install_mode === 'auto' && !autoPaused) setTimeout(runAutoFlow, 600);
-        } else {
-          renderStartScreen();
-          showScreen('start');
+      // Ретраим, пока не получим state: сервер может быть занят долгим шагом
+      // (STATE_LOCK) или временно недоступен.
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const data = await refreshState(true);
+          if (data && data.busy) {
+            setLoadingScreen(t('loadingBusy'), t('loadingBusyDesc'));
+            await sleep(3000);
+            continue;
+          }
+          break;
+        } catch (e) {
+          setLoadingScreen(t('loadingRetry'), e.message || '');
+          await sleep(Math.min(2000 + attempt * 1000, 8000));
         }
-        setInterval(pollLog, 1500);
-      } catch (e) {
-        showScreen('wizard');
-        document.getElementById('step-status').textContent = t('error') + ': ' + e.message;
-        document.getElementById('step-status').classList.remove('hidden');
       }
+      if (state.install_started) {
+        showScreen('wizard');
+        updateModeBadge();
+        if (state.install_mode === 'auto' && !autoPaused) setTimeout(runAutoFlow, 600);
+      } else {
+        renderStartScreen();
+        showScreen('start');
+      }
+      setInterval(pollLog, 1500);
     }
     init();
   </script>

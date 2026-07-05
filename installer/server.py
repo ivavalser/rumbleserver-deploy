@@ -45,6 +45,8 @@ LOG_BUFFER: deque[str] = deque(maxlen=500)
 LOG_LOCK = threading.Lock()
 STATE_LOCK = threading.Lock()
 SHUTDOWN = threading.Event()
+# Который шаг сейчас выполняется (для ответа "busy" пока STATE_LOCK занят)
+RUNNING_STEP: dict = {"id": None, "action": None}
 
 
 def append_log(line: str) -> None:
@@ -146,7 +148,21 @@ class InstallerHandler(BaseHTTPRequestHandler):
         if path == "/api/state":
             if not self._require_auth():
                 return
-            with STATE_LOCK:
+            if not STATE_LOCK.acquire(timeout=2):
+                # Долгий apply держит лок — не вешаем UI, отвечаем сразу
+                self._json_response(
+                    HTTPStatus.OK,
+                    {
+                        "busy": True,
+                        "running_step": RUNNING_STEP.get("id"),
+                        "running_action": RUNNING_STEP.get("action"),
+                        "install_started": bool(self.ctx.get("install_started")),
+                        "install_mode": self.ctx.get("install_mode", ""),
+                        "install_dir": str(INSTALL_DIR),
+                    },
+                )
+                return
+            try:
                 statuses = step_statuses(self.ctx)
                 current = next((s for s in statuses if s["status"] != "done"), statuses[-1])
                 defaults = _default_env_payload(self.ctx)
@@ -169,6 +185,8 @@ class InstallerHandler(BaseHTTPRequestHandler):
                         "auto_paused": bool(self.ctx.get("auto_paused")),
                     },
                 )
+            finally:
+                STATE_LOCK.release()
             return
 
         if path == "/api/log":
@@ -258,6 +276,8 @@ class InstallerHandler(BaseHTTPRequestHandler):
                 return
             payload = self._read_json()
             try:
+                RUNNING_STEP["id"] = step_id
+                RUNNING_STEP["action"] = action
                 with STATE_LOCK:
                     invalidate_step_check_cache(self.ctx, step_id)
                     if action == "check":
@@ -316,6 +336,9 @@ class InstallerHandler(BaseHTTPRequestHandler):
                         "data": {},
                     },
                 )
+            finally:
+                RUNNING_STEP["id"] = None
+                RUNNING_STEP["action"] = None
             return
 
         if path == "/api/aws/provision":
