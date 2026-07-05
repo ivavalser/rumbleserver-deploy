@@ -1156,11 +1156,13 @@ def apply_nginx(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
 
     ctx.update({"domain": domain, "certbot_email": email})
 
+    ctx.log("Installing Nginx and Certbot...")
     ctx.run(["apt-get", "update", "-qq"])
     ctx.run(["apt-get", "install", "-y", "nginx", "certbot", "python3-certbot-nginx"])
     ctx.run(["rm", "-f", "/etc/nginx/sites-enabled/default"], check=False)
     ctx.run(["mkdir", "-p", "/var/www/html"])
 
+    ctx.log("Writing Nginx site configuration...")
     template = ctx.nginx_template.read_text(encoding="utf-8")
     conf_content = template.replace("YOUR_DOMAIN", domain)
     conf_path = Path("/etc/nginx/sites-available/rumbleserver")
@@ -1172,6 +1174,7 @@ def apply_nginx(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
     ctx.run(["nginx", "-t"])
     ctx.run(["systemctl", "reload", "nginx"])
 
+    ctx.log("Obtaining HTTPS certificate (this may take a minute)...")
     certbot_cmd = [
         "certbot",
         "--nginx",
@@ -1186,7 +1189,9 @@ def apply_nginx(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
     else:
         certbot_cmd.append("--register-unsafely-without-email")
     ctx.run(certbot_cmd, check=False)
+    ctx.log("Testing certificate renewal dry-run (this may take a minute)...")
     ctx.run(["certbot", "renew", "--dry-run"], check=False)
+    ctx.log("Verifying HTTPS...")
     return check_nginx(ctx)
 
 

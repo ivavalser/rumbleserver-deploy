@@ -284,6 +284,12 @@
         deployPulling: 'Pulling container images…',
         deployStarting: 'Starting services…',
         deployWaiting: 'Waiting for application to start…',
+        nginxWorking: 'Setting up Nginx and HTTPS…',
+        nginxInstalling: 'Installing Nginx and Certbot…',
+        nginxConfiguring: 'Writing Nginx configuration…',
+        nginxCertbot: 'Obtaining HTTPS certificate…',
+        nginxRenewTest: 'Testing certificate renewal (dry-run)…',
+        nginxVerifying: 'Verifying HTTPS…',
         adminUsername: 'Username',
         adminEmail: 'Email',
         adminPassword: 'Password',
@@ -370,6 +376,12 @@
         deployPulling: 'Скачиваем образы контейнеров…',
         deployStarting: 'Запускаем сервисы…',
         deployWaiting: 'Ждём запуск приложения…',
+        nginxWorking: 'Настраиваем Nginx и HTTPS…',
+        nginxInstalling: 'Устанавливаем Nginx и Certbot…',
+        nginxConfiguring: 'Пишем конфиг Nginx…',
+        nginxCertbot: 'Получаем HTTPS-сертификат…',
+        nginxRenewTest: 'Проверяем продление сертификата (dry-run)…',
+        nginxVerifying: 'Проверяем HTTPS…',
         adminUsername: 'Имя пользователя',
         adminEmail: 'Email',
         adminPassword: 'Пароль',
@@ -426,7 +438,8 @@
     const params = new URLSearchParams(location.search);
     const TOKEN = params.get('token') || '';
     let state = null, currentStepId = null, logOffset = 0, busy = false, lastFormStepId = null, lastActionResult = null;
-    let deployPhase = '', fastLogPollTimer = null;
+    let stepBusyPhase = '', fastLogPollTimer = null;
+    const LONG_RUNNING_STEPS = new Set(['deploy', 'nginx']);
 
     function t(k) { return (UI[lang] && UI[lang][k]) || UI.en[k] || k; }
     function stepMeta(id) { return (STEPS_I18N[lang] && STEPS_I18N[lang][id]) || STEPS_I18N.en[id] || { title: id, desc: '', pending: '' }; }
@@ -535,27 +548,51 @@
       return busy || !!awsOperation;
     }
 
+    function isLongRunningStepBusy() {
+      return busy && LONG_RUNNING_STEPS.has(currentStepId) && !awsOperation;
+    }
+
+    function defaultStepBusyLabel() {
+      if (currentStepId === 'nginx') return t('nginxWorking');
+      if (currentStepId === 'deploy') return t('deployWorking');
+      return t('deployWorking');
+    }
+
     function syncStepBusyOverlay() {
       const panel = document.getElementById('step-panel');
       const overlay = document.getElementById('step-busy-overlay');
-      const show = busy && currentStepId === 'deploy' && !awsOperation;
+      const show = isLongRunningStepBusy();
       if (panel) panel.classList.toggle('step-busy', show);
       if (!overlay) return;
       overlay.classList.toggle('hidden', !show);
       if (show) {
-        overlay.innerHTML = '<span class="spinner"></span>' + esc(deployPhase || t('deployWorking'));
+        overlay.innerHTML = '<span class="spinner"></span>' + esc(stepBusyPhase || defaultStepBusyLabel());
       }
     }
 
-    function updateDeployPhaseFromLog(lines) {
-      if (!busy || currentStepId !== 'deploy' || awsOperation) return;
+    function updateStepBusyPhaseFromLog(lines) {
+      if (!isLongRunningStepBusy()) return;
       const text = lines.join('\n');
-      if (text.includes('Waiting for web') || text.includes('Health check attempt') || text.includes('manage.py check')) {
-        deployPhase = t('deployWaiting');
-      } else if (text.includes(' up -d') || text.includes('Starting services')) {
-        deployPhase = t('deployStarting');
-      } else if (text.includes(' pull') || text.includes('Pulling container') || text.includes('Downloading') || text.includes('Extracting') || text.includes('Pull complete')) {
-        deployPhase = t('deployPulling');
+      if (currentStepId === 'deploy') {
+        if (text.includes('Waiting for web') || text.includes('Health check attempt') || text.includes('manage.py check')) {
+          stepBusyPhase = t('deployWaiting');
+        } else if (text.includes(' up -d') || text.includes('Starting services')) {
+          stepBusyPhase = t('deployStarting');
+        } else if (text.includes(' pull') || text.includes('Pulling container') || text.includes('Downloading') || text.includes('Extracting') || text.includes('Pull complete')) {
+          stepBusyPhase = t('deployPulling');
+        }
+      } else if (currentStepId === 'nginx') {
+        if (text.includes('Verifying HTTPS')) {
+          stepBusyPhase = t('nginxVerifying');
+        } else if (text.includes('Testing certificate renewal') || text.includes('certbot renew')) {
+          stepBusyPhase = t('nginxRenewTest');
+        } else if (text.includes('Obtaining HTTPS certificate') || (text.includes(' certbot') && text.includes('--nginx'))) {
+          stepBusyPhase = t('nginxCertbot');
+        } else if (text.includes('Writing Nginx') || text.includes('nginx -t')) {
+          stepBusyPhase = t('nginxConfiguring');
+        } else if (text.includes('Installing Nginx') || text.includes('apt-get')) {
+          stepBusyPhase = t('nginxInstalling');
+        }
       }
       syncStepBusyOverlay();
     }
@@ -904,7 +941,7 @@
             const logEl = document.getElementById('log');
             logEl.textContent += filtered.join('\n') + '\n';
             logEl.scrollTop = logEl.scrollHeight;
-            updateDeployPhaseFromLog(filtered);
+            updateStepBusyPhaseFromLog(filtered);
           }
           logOffset = data.total;
         }
@@ -946,8 +983,8 @@
       } else if (recentFail) {
         statusEl.textContent = lastActionResult.data.message || t('error');
         statusEl.classList.add('fail');
-      } else if (busy && currentStepId === 'deploy' && !awsOperation) {
-        statusEl.innerHTML = '<span class="spinner"></span>' + esc(deployPhase || t('deployWorking'));
+      } else if (isLongRunningStepBusy()) {
+        statusEl.innerHTML = '<span class="spinner"></span>' + esc(stepBusyPhase || defaultStepBusyLabel());
         statusEl.classList.add('info');
       } else {
         statusEl.textContent = pendingMessage(step);
@@ -1307,7 +1344,7 @@
     function mkBtn(text, cls, handler) {
       const b = document.createElement('button');
       const locked = isAwsStepBusy();
-      if (locked && cls.includes('primary') && currentStepId === 'deploy') {
+      if (locked && cls.includes('primary') && LONG_RUNNING_STEPS.has(currentStepId)) {
         b.innerHTML = '<span class="spinner"></span>' + esc(text);
       } else {
         b.textContent = text;
@@ -1348,8 +1385,8 @@
         awsOperation = (action === 'apply' || action === 'check') ? 'verify' : 'working';
       }
       syncAwsFormButtons();
-      if (currentStepId === 'deploy' && action === 'apply') {
-        deployPhase = t('deployPulling');
+      if (LONG_RUNNING_STEPS.has(currentStepId) && action === 'apply') {
+        stepBusyPhase = currentStepId === 'nginx' ? t('nginxInstalling') : t('deployPulling');
         startFastLogPoll();
         syncStepBusyOverlay();
       }
@@ -1398,7 +1435,7 @@
       finally {
         busy = false;
         awsOperation = null;
-        deployPhase = '';
+        stepBusyPhase = '';
         stopFastLogPoll();
         syncAwsFormButtons();
         syncStepBusyOverlay();
