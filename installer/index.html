@@ -57,6 +57,13 @@
     label { display: flex; flex-direction: column; gap: 6px; font-size: 0.82rem; color: var(--muted); }
     label .field-label { color: var(--muted); }
     label input, label select { width: 100%; }
+    .password-field { display: flex; flex-direction: column; gap: 6px; }
+    .password-field .field-label { color: var(--muted); font-size: 0.82rem; }
+    .password-row { display: flex; gap: 8px; align-items: stretch; }
+    .password-row input { flex: 1; min-width: 0; }
+    .password-actions { display: flex; gap: 6px; flex-shrink: 0; }
+    button.btn.compact { padding: 10px 12px; font-size: 0.82rem; white-space: nowrap; }
+    .field-hint { font-size: 0.78rem; color: var(--muted); line-height: 1.4; margin-top: -4px; }
     input { background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 10px 12px; font-size: 0.9rem; }
     input:focus { outline: 2px solid rgba(59,130,246,.45); border-color: var(--accent); }
     .checkbox-row { display: flex; align-items: center; gap: 8px; margin: 8px 0 12px; color: var(--text); font-size: 0.9rem; }
@@ -277,6 +284,13 @@
         adminEmail: 'Email',
         adminPassword: 'Password',
         adminEmailPh: 'admin@example.com',
+        adminPasswordConfirm: 'Confirm password',
+        adminPasswordConfirmHelp: 'Re-enter the password manually — it will not be filled automatically.',
+        adminPasswordShow: 'Show',
+        adminPasswordHide: 'Hide',
+        adminPasswordGenerate: 'Generate',
+        adminPasswordMismatch: 'Passwords do not match.',
+        adminPasswordRequired: 'Enter and confirm the password.',
       },
       ru: {
         title: 'Rumble Server — установщик',
@@ -356,6 +370,13 @@
         adminEmail: 'Email',
         adminPassword: 'Пароль',
         adminEmailPh: 'admin@example.com',
+        adminPasswordConfirm: 'Подтверждение пароля',
+        adminPasswordConfirmHelp: 'Введи пароль ещё раз вручную — поле не заполняется автоматически.',
+        adminPasswordShow: 'Показать',
+        adminPasswordHide: 'Скрыть',
+        adminPasswordGenerate: 'Сгенерировать',
+        adminPasswordMismatch: 'Пароли не совпадают.',
+        adminPasswordRequired: 'Введи пароль и подтверждение.',
         externalDb: 'Внешняя PostgreSQL',
         externalRedis: 'Внешний Redis',
         strongPassword: 'Сильный пароль',
@@ -762,6 +783,46 @@
 
     function esc(s) { return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+    function wireSuperuserPasswordForm(root) {
+      const pwdInput = root.querySelector('#admin_password');
+      const confirmInput = root.querySelector('#admin_password_confirm');
+      const toggleBtn = root.querySelector('#admin_password_toggle');
+      const genBtn = root.querySelector('#admin_password_generate');
+      if (!pwdInput || !confirmInput || !toggleBtn || !genBtn) return;
+
+      let pwdVisible = false;
+      const syncToggleLabel = () => {
+        toggleBtn.textContent = pwdVisible ? t('adminPasswordHide') : t('adminPasswordShow');
+      };
+      const setPasswordVisibility = visible => {
+        pwdVisible = visible;
+        pwdInput.type = visible ? 'text' : 'password';
+        syncToggleLabel();
+      };
+
+      toggleBtn.onclick = () => setPasswordVisibility(!pwdVisible);
+      confirmInput.addEventListener('focus', () => confirmInput.removeAttribute('readonly'));
+
+      genBtn.onclick = async () => {
+        if (isAwsStepBusy()) return;
+        genBtn.disabled = true;
+        try {
+          const res = await api('/api/generate-password');
+          if (!res.ok) throw new Error(t('error'));
+          const data = await res.json();
+          pwdInput.value = data.password || '';
+          confirmInput.value = '';
+          confirmInput.setAttribute('readonly', '');
+          setPasswordVisibility(true);
+          confirmInput.focus();
+        } catch (e) {
+          alert(t('error') + ': ' + e.message);
+        } finally {
+          genBtn.disabled = false;
+        }
+      };
+    }
+
     function setLang(l) {
       lang = l;
       localStorage.setItem('installer_lang', l);
@@ -1028,8 +1089,20 @@
         formEl.innerHTML = `<div class="form-stack">
           <label><span class="field-label">${t('adminUsername')}</span><input type="text" id="admin_username" autocomplete="username" value="${esc(state.admin_username || 'admin')}"></label>
           <label><span class="field-label">${t('adminEmail')}</span><input type="email" id="admin_email" autocomplete="email" placeholder="${esc(t('adminEmailPh'))}"></label>
-          <label><span class="field-label">${t('adminPassword')}</span><input type="password" id="admin_password" autocomplete="new-password" placeholder="${esc(t('strongPassword'))}"></label>
+          <div class="password-field">
+            <span class="field-label">${t('adminPassword')}</span>
+            <div class="password-row">
+              <input type="password" id="admin_password" autocomplete="new-password" placeholder="${esc(t('strongPassword'))}">
+              <div class="password-actions">
+                <button type="button" class="btn secondary compact" id="admin_password_toggle">${t('adminPasswordShow')}</button>
+                <button type="button" class="btn secondary compact" id="admin_password_generate">${t('adminPasswordGenerate')}</button>
+              </div>
+            </div>
+          </div>
+          <label><span class="field-label">${t('adminPasswordConfirm')}</span><input type="password" id="admin_password_confirm" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" readonly placeholder="${esc(t('strongPassword'))}"></label>
+          <p class="field-hint">${t('adminPasswordConfirmHelp')}</p>
         </div>`;
+        wireSuperuserPasswordForm(formEl);
         return;
       }
       if (step.id === 'nginx') {
@@ -1165,7 +1238,12 @@
           aws_s3_region_name: g('aws_s3_region_name')?.value || 'eu-north-1',
         };
       }
-      if (stepId === 'superuser') return { admin_username: g('admin_username')?.value || '', admin_email: g('admin_email')?.value || '', admin_password: g('admin_password')?.value || '' };
+      if (stepId === 'superuser') return {
+        admin_username: g('admin_username')?.value || '',
+        admin_email: g('admin_email')?.value || '',
+        admin_password: g('admin_password')?.value || '',
+        admin_password_confirm: g('admin_password_confirm')?.value || '',
+      };
       if (stepId === 'nginx') return { certbot_email: g('certbot_email')?.value || '', domain: g('nginx_domain')?.value || '' };
       return {};
     }
@@ -1212,6 +1290,18 @@
 
     async function runAction(action, dnsOnly = false, silent = false) {
       if (isAwsStepBusy()) return;
+      if (currentStepId === 'superuser' && action === 'apply') {
+        const pwd = document.getElementById('admin_password')?.value || '';
+        const confirm = document.getElementById('admin_password_confirm')?.value || '';
+        if (!pwd || !confirm) {
+          alert(t('adminPasswordRequired'));
+          return;
+        }
+        if (pwd !== confirm) {
+          alert(t('adminPasswordMismatch'));
+          return;
+        }
+      }
       busy = true;
       if (currentStepId === 'aws') {
         awsOperation = (action === 'apply' || action === 'check') ? 'verify' : 'working';

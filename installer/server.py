@@ -28,6 +28,7 @@ from steps import (  # noqa: E402
     check_aws_access,
     check_dns,
     dns_setup_hint,
+    generate_admin_password,
     get_server_public_ip,
     invalidate_step_check_cache,
     save_step_check_cache,
@@ -179,6 +180,15 @@ class InstallerHandler(BaseHTTPRequestHandler):
                     "manual": result.manual,
                     "data": result.data,
                 },
+            )
+            return
+
+        if path == "/api/generate-password":
+            if not self._require_auth():
+                return
+            self._json_response(
+                HTTPStatus.OK,
+                {"password": generate_admin_password()},
             )
             return
 

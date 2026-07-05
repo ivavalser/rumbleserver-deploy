@@ -251,6 +251,11 @@ def _generate_secret(length: int = 32) -> str:
     return secrets.token_urlsafe(length)
 
 
+def generate_admin_password() -> str:
+    """Strong password for Django superuser (installer-generated, not browser)."""
+    return secrets.token_urlsafe(18)
+
+
 def _generate_django_secret() -> str:
     try:
         proc = subprocess.run(
@@ -1014,8 +1019,15 @@ def apply_superuser(ctx: InstallerContext, payload: dict[str, Any]) -> StepResul
     username = (payload.get("admin_username") or "").strip()
     email = (payload.get("admin_email") or "").strip()
     password = (payload.get("admin_password") or "").strip()
+    confirm = (payload.get("admin_password_confirm") or "").strip()
     if not username or not password:
         return _fail("Enter username and password.")
+    if not confirm:
+        return _fail("Confirm the password by entering it again.")
+    if password != confirm:
+        return _fail("Passwords do not match.")
+    if len(password) < 8:
+        return _fail("Password must be at least 8 characters.")
     ctx.update(
         {
             "admin_username": username,
