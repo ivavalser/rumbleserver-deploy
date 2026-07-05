@@ -1119,7 +1119,16 @@ def check_finish(ctx: InstallerContext) -> StepResult:
             break
         if ctx.get(f"skipped_{step.id}"):
             continue
+        cached = _cached_step_result(ctx, step.id)
+        if cached is not None:
+            if not cached.ok:
+                return _fail(
+                    "Previous setup steps are not complete yet.",
+                    manual=f'Complete "{step.title}" before viewing the summary.',
+                )
+            continue
         result = step.check(ctx)
+        save_step_check_cache(ctx, step.id, result)
         if not result.ok:
             return _fail(
                 "Previous setup steps are not complete yet.",
@@ -1246,29 +1255,93 @@ STEPS: list[StepDef] = [
     ),
 ]
 
-STEP_MAP = {step.id: step for step in STEPS}
+STEP_CHECK_CACHE_KEY = "step_check_cache"
 
 
-def step_statuses(ctx: InstallerContext) -> list[dict[str, Any]]:
+def _get_step_cache(ctx: InstallerContext) -> dict[str, Any]:
+    raw = ctx.get(STEP_CHECK_CACHE_KEY) or {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _cached_step_result(ctx: InstallerContext, step_id: str) -> StepResult | None:
+    entry = _get_step_cache(ctx).get(step_id)
+    if not entry:
+        return None
+    return StepResult(
+        ok=bool(entry.get("ok")),
+        message=entry.get("message", ""),
+        manual=entry.get("manual", ""),
+        cwd=entry.get("cwd", ""),
+        data=entry.get("data") or {},
+    )
+
+
+def save_step_check_cache(ctx: InstallerContext, step_id: str, result: StepResult) -> None:
+    cache = dict(_get_step_cache(ctx))
+    cache[step_id] = {
+        "ok": result.ok,
+        "message": result.message,
+        "manual": result.manual,
+        "cwd": result.cwd,
+        "data": result.data,
+    }
+    ctx.set(STEP_CHECK_CACHE_KEY, cache)
+
+
+def invalidate_step_check_cache(ctx: InstallerContext, step_id: str | None = None) -> None:
+    if step_id is None:
+        ctx.set(STEP_CHECK_CACHE_KEY, {})
+        return
+    cache = dict(_get_step_cache(ctx))
+    drop = False
+    for step in STEPS:
+        if step.id == step_id:
+            drop = True
+        if drop:
+            cache.pop(step.id, None)
+    ctx.set(STEP_CHECK_CACHE_KEY, cache)
+
+
+def _step_status_item(step: StepDef, result: StepResult, status: str) -> dict[str, Any]:
+    return {
+        "id": step.id,
+        "title": step.title,
+        "description": step.description,
+        "status": status,
+        "message": result.message,
+        "needs_form": step.needs_form,
+        "manual": result.manual,
+        "cwd": result.cwd,
+        "data": result.data,
+    }
+
+
+def step_statuses(ctx: InstallerContext, *, live: bool = False) -> list[dict[str, Any]]:
+    """Return sidebar step statuses. Uses cache unless live=True (verify/apply)."""
     items: list[dict[str, Any]] = []
     for step in STEPS:
+        if ctx.get(f"skipped_{step.id}"):
+            items.append(
+                _step_status_item(step, _ok("Skipped manually."), "done")
+            )
+            continue
+
+        if not live:
+            cached = _cached_step_result(ctx, step.id)
+            if cached is not None:
+                status = "done" if cached.ok else "pending"
+                items.append(_step_status_item(step, cached, status))
+                continue
+
         try:
             result = step.check(ctx)
             status = "done" if result.ok else "pending"
         except Exception as exc:
             status = "error"
             result = StepResult(ok=False, message=str(exc))
-        items.append(
-            {
-                "id": step.id,
-                "title": step.title,
-                "description": step.description,
-                "status": status,
-                "message": result.message,
-                "needs_form": step.needs_form,
-                "manual": result.manual,
-                "cwd": result.cwd,
-                "data": result.data,
-            }
-        )
+        save_step_check_cache(ctx, step.id, result)
+        items.append(_step_status_item(step, result, status))
     return items
+
+
+STEP_MAP = {step.id: step for step in STEPS}

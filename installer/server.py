@@ -29,6 +29,8 @@ from steps import (  # noqa: E402
     check_dns,
     dns_setup_hint,
     get_server_public_ip,
+    invalidate_step_check_cache,
+    save_step_check_cache,
     step_statuses,
 )
 
@@ -196,7 +198,10 @@ class InstallerHandler(BaseHTTPRequestHandler):
             if not self._require_auth():
                 return
             payload = self._read_json()
-            result = check_aws_access(self.ctx, payload)
+            with STATE_LOCK:
+                invalidate_step_check_cache(self.ctx, "aws")
+                result = check_aws_access(self.ctx, payload)
+                save_step_check_cache(self.ctx, "aws", result)
             self._json_response(
                 HTTPStatus.OK,
                 {
@@ -221,6 +226,7 @@ class InstallerHandler(BaseHTTPRequestHandler):
             payload = self._read_json()
             try:
                 with STATE_LOCK:
+                    invalidate_step_check_cache(self.ctx, step_id)
                     if action == "check":
                         result = step.check(self.ctx)
                     elif action == "apply":
@@ -239,6 +245,7 @@ class InstallerHandler(BaseHTTPRequestHandler):
                     else:
                         self._json_response(HTTPStatus.BAD_REQUEST, {"error": "unknown action"})
                         return
+                    save_step_check_cache(self.ctx, step_id, result)
                 self._json_response(
                     HTTPStatus.OK,
                     {
@@ -268,13 +275,15 @@ class InstallerHandler(BaseHTTPRequestHandler):
             try:
                 from aws_setup import provision_s3
 
-                result = provision_s3(
-                    bootstrap_access_key=(payload.get("aws_bootstrap_access_key_id") or "").strip(),
-                    bootstrap_secret_key=(payload.get("aws_bootstrap_secret_access_key") or "").strip(),
-                    region=(payload.get("aws_s3_region_name") or "eu-north-1").strip(),
-                    bucket_name=(payload.get("aws_storage_bucket_name") or "").strip(),
-                    log=append_log,
-                )
+                with STATE_LOCK:
+                    invalidate_step_check_cache(self.ctx, "aws")
+                    result = provision_s3(
+                        bootstrap_access_key=(payload.get("aws_bootstrap_access_key_id") or "").strip(),
+                        bootstrap_secret_key=(payload.get("aws_bootstrap_secret_access_key") or "").strip(),
+                        region=(payload.get("aws_s3_region_name") or "eu-north-1").strip(),
+                        bucket_name=(payload.get("aws_storage_bucket_name") or "").strip(),
+                        log=append_log,
+                    )
                 self._json_response(
                     HTTPStatus.OK,
                     {"ok": True, "message": "AWS S3 bucket and IAM user created.", **result},

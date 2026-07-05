@@ -1210,7 +1210,6 @@
       try {
         await refreshState();
         setInterval(pollLog, 1500);
-        setInterval(refreshState, 5000);
       } catch (e) {
         document.getElementById('step-status').textContent = t('error') + ': ' + e.message;
         document.getElementById('step-status').classList.remove('hidden');
