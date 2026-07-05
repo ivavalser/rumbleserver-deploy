@@ -125,13 +125,22 @@ if ! command -v git &>/dev/null; then
     apt-get install -y git
 fi
 
+_update_deploy_repo() {
+    local branch="$1"
+    echo "🔄 Updating deploy files in $INSTALL_DIR (branch ${branch})..."
+    git -C "$INSTALL_DIR" fetch origin "$branch" --depth 1 2>/dev/null || true
+    git -C "$INSTALL_DIR" checkout "$branch" 2>/dev/null || true
+    if git -C "$INSTALL_DIR" rev-parse "origin/${branch}" >/dev/null 2>&1; then
+        git -C "$INSTALL_DIR" reset --hard "origin/${branch}"
+    else
+        git -C "$INSTALL_DIR" pull --ff-only origin "$branch" 2>/dev/null || true
+    fi
+}
+
 if [ -d "$INSTALL_DIR/.git" ]; then
     REMOTE="$(git -C "$INSTALL_DIR" remote get-url origin 2>/dev/null || true)"
     if [[ "$REMOTE" == *"rumbleserver-deploy"* ]]; then
-        echo "🔄 Updating deploy files in $INSTALL_DIR (branch ${DEPLOY_BRANCH})..."
-        git -C "$INSTALL_DIR" fetch origin "$DEPLOY_BRANCH" --depth 1 2>/dev/null || true
-        git -C "$INSTALL_DIR" checkout "$DEPLOY_BRANCH" 2>/dev/null || true
-        git -C "$INSTALL_DIR" pull --ff-only origin "$DEPLOY_BRANCH" 2>/dev/null || true
+        _update_deploy_repo "$DEPLOY_BRANCH"
     elif [ -f "$INSTALL_DIR/installer/server.py" ]; then
         echo "✅ Using local bundle at $INSTALL_DIR"
     else
@@ -150,10 +159,7 @@ if [ ! -f "$INSTALL_DIR/installer/server.py" ]; then
     if [ -d "$INSTALL_DIR/.git" ]; then
         REMOTE="$(git -C "$INSTALL_DIR" remote get-url origin 2>/dev/null || true)"
         if [[ "$REMOTE" == *"rumbleserver-deploy"* ]]; then
-            echo "🔄 Updating deploy files (branch ${DEPLOY_BRANCH})..."
-            git -C "$INSTALL_DIR" fetch origin "$DEPLOY_BRANCH" --depth 1 2>/dev/null || true
-            git -C "$INSTALL_DIR" checkout "$DEPLOY_BRANCH" 2>/dev/null || true
-            git -C "$INSTALL_DIR" pull --ff-only origin "$DEPLOY_BRANCH" 2>/dev/null || true
+            _update_deploy_repo "$DEPLOY_BRANCH"
         fi
     fi
 fi

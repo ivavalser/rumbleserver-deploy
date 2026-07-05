@@ -206,7 +206,12 @@
         awsVerifyWaiting: 'Waiting for AWS to propagate credentials ({s}s)…',
         awsVerifyWaitDone: 'Propagation wait complete',
         awsVerifyAttempt: 'Checking S3 access (attempt {n}/{max})…',
+        awsVerifyAttemptOk: 'S3 access verified (attempt {n}/{max})',
+        awsVerifyAttemptFail: 'Attempt {n}/{max} failed',
         awsVerifyRetryWait: 'Retry in {s}s…',
+        awsVerifyRetryDone: 'Retry pause complete',
+        awsVerifySuccess: 'All S3 checks passed',
+        awsVerifyAllFailed: 'Verification failed after {max} attempts',
         awsSavedVerified: 'AWS configuration saved and verified.',
         serverIp: 'This server IP',
         serverIpUnknown: 'Could not detect automatically — check your VPS control panel',
@@ -277,7 +282,12 @@
         awsVerifyWaiting: 'Ждём распространения credentials в AWS ({s} с)…',
         awsVerifyWaitDone: 'Ожидание завершено',
         awsVerifyAttempt: 'Проверка доступа к S3 (попытка {n}/{max})…',
+        awsVerifyAttemptOk: 'Доступ к S3 подтверждён (попытка {n}/{max})',
+        awsVerifyAttemptFail: 'Попытка {n}/{max} не прошла',
         awsVerifyRetryWait: 'Повтор через {s} с…',
+        awsVerifyRetryDone: 'Пауза перед повтором завершена',
+        awsVerifySuccess: 'Все проверки S3 пройдены',
+        awsVerifyAllFailed: 'Проверка не прошла после {max} попыток',
         awsSavedVerified: 'AWS настроен и проверен.',
         serverIp: 'IP этого сервера',
         serverIpUnknown: 'Не удалось определить автоматически — смотри панель VPS',
@@ -525,71 +535,83 @@
       const maxAttempts = options.maxAttempts || 5;
       const initialDelayMs = options.initialDelayMs ?? 12000;
       const retryDelayMs = options.retryDelayMs || 8000;
-      const progress = [
-        { id: 'wait', label: fmt(t('awsVerifyWaiting'), { s: Math.ceil(initialDelayMs / 1000) }), status: 'pending' },
-      ];
-      for (let n = 1; n <= maxAttempts; n++) {
-        progress.push({
-          id: 'try-' + n,
-          label: fmt(t('awsVerifyAttempt'), { n, max: maxAttempts }),
-          status: 'pending',
-        });
-      }
+      const progress = [];
 
-      progress[0].status = 'active';
-      renderAwsVerifyProgress(progress);
+      const render = () => renderAwsVerifyProgress(progress);
+
+      const pushStep = (id, label, status) => {
+        const step = { id, label, status };
+        progress.push(step);
+        render();
+        return step;
+      };
+
+      const patchStep = (step, label, status) => {
+        if (label !== undefined) step.label = label;
+        if (status !== undefined) step.status = status;
+        render();
+      };
+
+      const waitStep = pushStep(
+        'wait',
+        fmt(t('awsVerifyWaiting'), { s: Math.ceil(initialDelayMs / 1000) }),
+        'active',
+      );
       await countdown(initialDelayMs, sec => {
-        progress[0].label = sec > 0
-          ? fmt(t('awsVerifyWaiting'), { s: sec })
-          : t('awsVerifyWaitDone');
-        renderAwsVerifyProgress(progress);
+        patchStep(
+          waitStep,
+          sec > 0 ? fmt(t('awsVerifyWaiting'), { s: sec }) : t('awsVerifyWaitDone'),
+          'active',
+        );
       });
-      progress[0].status = 'done';
-      progress[0].label = t('awsVerifyWaitDone');
-      renderAwsVerifyProgress(progress);
+      patchStep(waitStep, t('awsVerifyWaitDone'), 'done');
 
       let lastData = { ok: false, message: '' };
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        const stepIdx = attempt;
-        progress[stepIdx].status = 'active';
-        renderAwsVerifyProgress(progress);
+        const tryStep = pushStep(
+          'try-' + attempt,
+          fmt(t('awsVerifyAttempt'), { n: attempt, max: maxAttempts }),
+          'active',
+        );
 
         lastData = await checkAwsAccessOnce();
         const isLastAttempt = attempt === maxAttempts;
         renderAwsAccessResult(lastData, { showFailure: isLastAttempt });
 
         if (lastData.ok) {
-          progress[stepIdx].status = 'done';
-          renderAwsVerifyProgress(progress);
+          patchStep(
+            tryStep,
+            fmt(t('awsVerifyAttemptOk'), { n: attempt, max: maxAttempts }),
+            'done',
+          );
+          pushStep('success', t('awsVerifySuccess'), 'done');
           return lastData;
         }
 
-        progress[stepIdx].status = 'fail';
-        renderAwsVerifyProgress(progress);
+        patchStep(
+          tryStep,
+          fmt(t('awsVerifyAttemptFail'), { n: attempt, max: maxAttempts }),
+          'fail',
+        );
 
         if (attempt < maxAttempts) {
-          const waitId = 'retry-wait-' + attempt;
-          progress.push({
-            id: waitId,
-            label: fmt(t('awsVerifyRetryWait'), { s: Math.ceil(retryDelayMs / 1000) }),
-            status: 'active',
-          });
-          renderAwsVerifyProgress(progress);
+          const pauseStep = pushStep(
+            'pause-' + attempt,
+            fmt(t('awsVerifyRetryWait'), { s: Math.ceil(retryDelayMs / 1000) }),
+            'active',
+          );
           await countdown(retryDelayMs, sec => {
-            const waitStep = progress.find(p => p.id === waitId);
-            if (waitStep) {
-              waitStep.label = sec > 0
-                ? fmt(t('awsVerifyRetryWait'), { s: sec })
-                : fmt(t('awsVerifyAttempt'), { n: attempt + 1, max: maxAttempts });
-            }
-            renderAwsVerifyProgress(progress);
+            patchStep(
+              pauseStep,
+              sec > 0 ? fmt(t('awsVerifyRetryWait'), { s: sec }) : t('awsVerifyRetryDone'),
+              'active',
+            );
           });
-          const waitStep = progress.find(p => p.id === waitId);
-          if (waitStep) waitStep.status = 'done';
-          renderAwsVerifyProgress(progress);
+          patchStep(pauseStep, t('awsVerifyRetryDone'), 'done');
         }
       }
 
+      pushStep('final-fail', fmt(t('awsVerifyAllFailed'), { max: maxAttempts }), 'fail');
       return lastData;
     }
 
