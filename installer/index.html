@@ -84,6 +84,37 @@
     #aws-access-status, #env-dns-status { font-size: 0.85rem; margin-top: 4px; }
     .link-row { margin: 10px 0; }
     .link-row a { color: var(--accent); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,.25);
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      vertical-align: -2px;
+      margin-right: 6px;
+    }
+    .aws-verify-progress {
+      margin-top: 10px;
+      padding: 10px 12px;
+      background: rgba(59,130,246,.08);
+      border: 1px solid rgba(59,130,246,.25);
+      border-radius: 8px;
+    }
+    .verify-step {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 0;
+      font-size: 0.85rem;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+    .verify-step.active { color: var(--accent); }
+    .verify-step.done { color: var(--ok); }
+    .verify-step.fail { color: var(--err); }
+    .verify-step .mark { width: 16px; flex-shrink: 0; text-align: center; }
   </style>
 </head>
 <body>
@@ -152,6 +183,13 @@
         awsSectionBucket: 'Bucket and region',
         awsSectionApp: 'App credentials (for .env)',
         checkAwsAccess: 'Check S3 access',
+        awsProvisioning: 'Creating bucket & IAM user…',
+        awsChecking: 'Checking S3 access…',
+        awsVerifyWaiting: 'Waiting for AWS to propagate credentials ({s}s)…',
+        awsVerifyWaitDone: 'Propagation wait complete',
+        awsVerifyAttempt: 'Checking S3 access (attempt {n}/{max})…',
+        awsVerifyRetryWait: 'Retry in {s}s…',
+        awsSavedVerified: 'AWS configuration saved and verified.',
         serverIp: 'This server IP',
         serverIpUnknown: 'Could not detect automatically — check your VPS control panel',
         dnsType: 'Type',
@@ -215,6 +253,13 @@
         awsSectionBucket: 'Bucket и регион',
         awsSectionApp: 'Ключи приложения (для .env)',
         checkAwsAccess: 'Проверить доступ к S3',
+        awsProvisioning: 'Создаём bucket и IAM-пользователя…',
+        awsChecking: 'Проверяем доступ к S3…',
+        awsVerifyWaiting: 'Ждём распространения credentials в AWS ({s} с)…',
+        awsVerifyWaitDone: 'Ожидание завершено',
+        awsVerifyAttempt: 'Проверка доступа к S3 (попытка {n}/{max})…',
+        awsVerifyRetryWait: 'Повтор через {s} с…',
+        awsSavedVerified: 'AWS настроен и проверен.',
         serverIp: 'IP этого сервера',
         serverIpUnknown: 'Не удалось определить автоматически — смотри панель VPS',
         dnsType: 'Тип',
@@ -334,13 +379,181 @@
       } catch (e) { alert(t('error') + ': ' + e.message); }
     }
 
+    function fmt(str, vars) {
+      return String(str).replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
+    }
+
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function countdown(ms, onTick) {
+      let left = Math.ceil(ms / 1000);
+      onTick(left);
+      while (left > 0) {
+        await sleep(1000);
+        left -= 1;
+        onTick(Math.max(left, 0));
+      }
+    }
+
+    let awsOperation = null;
+
+    function setAwsFormBusy(op) {
+      awsOperation = op;
+      const provisionBtn = document.getElementById('aws-provision-btn');
+      const checkBtn = document.getElementById('aws-access-check-btn');
+      const guideLink = document.getElementById('aws-guide-link');
+      if (provisionBtn) {
+        provisionBtn.disabled = !!op;
+        if (op === 'provision') {
+          provisionBtn.innerHTML = '<span class="spinner"></span>' + esc(t('awsProvisioning'));
+        } else {
+          provisionBtn.textContent = t('awsProvision');
+        }
+      }
+      if (checkBtn) {
+        checkBtn.disabled = !!op;
+        if (op === 'verify') {
+          checkBtn.innerHTML = '<span class="spinner"></span>' + esc(t('awsChecking'));
+        } else if (!op) {
+          checkBtn.textContent = t('checkAwsAccess');
+        }
+      }
+      if (guideLink) guideLink.style.pointerEvents = op ? 'none' : '';
+      if (guideLink) guideLink.style.opacity = op ? '0.5' : '';
+    }
+
+    function renderAwsVerifyProgress(items) {
+      const el = document.getElementById('aws-verify-progress');
+      if (!el) return;
+      if (!items || !items.length) {
+        el.classList.add('hidden');
+        el.innerHTML = '';
+        return;
+      }
+      el.classList.remove('hidden');
+      el.innerHTML = items.map(item => {
+        let mark = '○';
+        if (item.status === 'active') mark = '<span class="spinner"></span>';
+        else if (item.status === 'done') mark = '✓';
+        else if (item.status === 'fail') mark = '✗';
+        return `<div class="verify-step ${item.status}"><span class="mark">${mark}</span><span>${esc(item.label)}</span></div>`;
+      }).join('');
+    }
+
+    function renderAwsAccessResult(data) {
+      renderAwsChecks(data.data?.checks);
+      const el = document.getElementById('aws-access-status');
+      if (el) {
+        el.className = data.ok ? 'ok' : 'fail';
+        el.textContent = data.message || '';
+      }
+    }
+
+    async function checkAwsAccessOnce() {
+      const res = await api('/api/step/aws/access-check', {
+        method: 'POST',
+        body: JSON.stringify(collectPayload('aws')),
+      });
+      return await res.json();
+    }
+
+    function shouldRetryAwsVerify(data) {
+      const checks = data?.data?.checks || [];
+      if (!checks.length) return false;
+      const creds = checks.find(c => (c.label || '').includes('Credentials valid'));
+      if (creds && !creds.ok) return false;
+      return true;
+    }
+
+    async function checkAwsAccessWithRetry() {
+      const maxAttempts = 3;
+      const initialDelayMs = 5000;
+      const retryDelayMs = 5000;
+      const progress = [
+        { id: 'wait', label: fmt(t('awsVerifyWaiting'), { s: Math.ceil(initialDelayMs / 1000) }), status: 'pending' },
+      ];
+      for (let n = 1; n <= maxAttempts; n++) {
+        progress.push({
+          id: 'try-' + n,
+          label: fmt(t('awsVerifyAttempt'), { n, max: maxAttempts }),
+          status: 'pending',
+        });
+      }
+
+      progress[0].status = 'active';
+      renderAwsVerifyProgress(progress);
+      await countdown(initialDelayMs, sec => {
+        progress[0].label = sec > 0
+          ? fmt(t('awsVerifyWaiting'), { s: sec })
+          : t('awsVerifyWaitDone');
+        renderAwsVerifyProgress(progress);
+      });
+      progress[0].status = 'done';
+      progress[0].label = t('awsVerifyWaitDone');
+      renderAwsVerifyProgress(progress);
+
+      let lastData = { ok: false, message: '' };
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const stepIdx = attempt;
+        progress[stepIdx].status = 'active';
+        renderAwsVerifyProgress(progress);
+
+        lastData = await checkAwsAccessOnce();
+        renderAwsAccessResult(lastData);
+
+        if (lastData.ok) {
+          progress[stepIdx].status = 'done';
+          renderAwsVerifyProgress(progress);
+          return lastData;
+        }
+
+        progress[stepIdx].status = 'fail';
+        renderAwsVerifyProgress(progress);
+
+        if (!shouldRetryAwsVerify(lastData)) {
+          return lastData;
+        }
+
+        if (attempt < maxAttempts) {
+          const waitId = 'retry-wait-' + attempt;
+          progress.push({
+            id: waitId,
+            label: fmt(t('awsVerifyRetryWait'), { s: Math.ceil(retryDelayMs / 1000) }),
+            status: 'active',
+          });
+          renderAwsVerifyProgress(progress);
+          await countdown(retryDelayMs, sec => {
+            const waitStep = progress.find(p => p.id === waitId);
+            if (waitStep) {
+              waitStep.label = sec > 0
+                ? fmt(t('awsVerifyRetryWait'), { s: sec })
+                : fmt(t('awsVerifyAttempt'), { n: attempt + 1, max: maxAttempts });
+            }
+            renderAwsVerifyProgress(progress);
+          });
+          const waitStep = progress.find(p => p.id === waitId);
+          if (waitStep) waitStep.status = 'done';
+          renderAwsVerifyProgress(progress);
+        }
+      }
+
+      return lastData;
+    }
+
     async function checkAwsAccess() {
+      if (awsOperation) return;
+      setAwsFormBusy('verify');
       try {
-        const data = await (await api('/api/step/aws/access-check', { method: 'POST', body: JSON.stringify(collectPayload('aws')) })).json();
-        renderAwsChecks(data.data?.checks);
-        const el = document.getElementById('aws-access-status');
-        if (el) { el.className = data.ok ? 'ok' : 'fail'; el.textContent = data.message || ''; }
-      } catch (e) { alert(t('error') + ': ' + e.message); }
+        const data = await checkAwsAccessOnce();
+        renderAwsAccessResult(data);
+        renderAwsVerifyProgress([]);
+      } catch (e) {
+        alert(t('error') + ': ' + e.message);
+      } finally {
+        setAwsFormBusy(null);
+      }
     }
 
     function renderAwsChecks(checks) {
@@ -602,6 +815,7 @@
                   <button type="button" class="btn secondary" id="aws-access-check-btn">${t('checkAwsAccess')}</button>
                 </div>
                 <div id="aws-access-status"></div>
+                <div id="aws-verify-progress" class="aws-verify-progress hidden"></div>
                 <div id="aws-access-checks" class="status-list"></div>
               </div>
             </section>
@@ -664,7 +878,10 @@
         alert(t('error') + ': bucket name required');
         return;
       }
+      if (awsOperation) return;
       busy = true;
+      setAwsFormBusy('provision');
+      renderAwsVerifyProgress([]);
       try {
         const res = await api('/api/aws/provision', { method: 'POST', body: JSON.stringify(payload) });
         const data = await res.json();
@@ -674,12 +891,28 @@
           g('aws_storage_bucket_name').value = data.aws_storage_bucket_name || payload.aws_storage_bucket_name;
           if (data.aws_s3_region_name) g('aws_s3_region_name').value = data.aws_s3_region_name;
           showActionResult(data, false);
-          await checkAwsAccess();
+          setAwsFormBusy('verify');
+          const verifyData = await checkAwsAccessWithRetry();
+          if (verifyData.ok) {
+            showActionResult({
+              ok: true,
+              message: t('awsSavedVerified'),
+              data: { checks: verifyData.data?.checks },
+            }, false);
+            await refreshState();
+          } else {
+            showActionResult(verifyData, false);
+          }
         } else {
           showActionResult(data, false);
         }
-      } catch (e) { alert(t('error') + ': ' + e.message); }
-      finally { busy = false; renderCurrentStep(); }
+      } catch (e) {
+        alert(t('error') + ': ' + e.message);
+      } finally {
+        setAwsFormBusy(null);
+        busy = false;
+        renderCurrentStep();
+      }
     }
 
     function renderEnvStatuses(statuses) {
@@ -781,7 +1014,25 @@
           return;
         }
         const res = await api('/api/step/' + currentStepId + '/' + action, { method: 'POST', body: JSON.stringify(collectPayload(currentStepId)) });
-        const data = await res.json();
+        let data = await res.json();
+        if (currentStepId === 'aws' && action === 'apply' && !data.ok && shouldRetryAwsVerify(data)) {
+          if (data.data?.checks) renderAwsChecks(data.data.checks);
+          setAwsFormBusy('verify');
+          try {
+            const verifyData = await checkAwsAccessWithRetry();
+            if (verifyData.ok) {
+              data = {
+                ok: true,
+                message: t('awsSavedVerified'),
+                data: { ...data.data, checks: verifyData.data?.checks },
+              };
+            } else {
+              data = verifyData;
+            }
+          } finally {
+            setAwsFormBusy(null);
+          }
+        }
         showActionResult(data, silent);
         await refreshState();
         advanceToNextStep(action, data);
