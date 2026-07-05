@@ -1032,32 +1032,39 @@ def apply_superuser(ctx: InstallerContext, payload: dict[str, Any]) -> StepResul
         {
             "admin_username": username,
             "admin_email": email,
-            "admin_password": password,
         }
     )
-    env = {
-        "DJANGO_SUPERUSER_PASSWORD": password,
-        "DJANGO_SUPERUSER_USERNAME": username,
-        "DJANGO_SUPERUSER_EMAIL": email,
-    }
-    ctx.run(
+    shell_script = (
+        "from django.contrib.auth import authenticate, get_user_model\n"
+        "User = get_user_model()\n"
+        f"username = {json.dumps(username)}\n"
+        f"password = {json.dumps(password)}\n"
+        f"email = {json.dumps(email or f'{username}@localhost')}\n"
+        "user, created = User.objects.update_or_create(\n"
+        "    username=username,\n"
+        "    defaults={'email': email, 'is_superuser': True, 'is_staff': True, 'is_active': True},\n"
+        ")\n"
+        "user.email = email\n"
+        "user.is_superuser = True\n"
+        "user.is_staff = True\n"
+        "user.is_active = True\n"
+        "user.set_password(password)\n"
+        "user.save()\n"
+        "if not authenticate(username=username, password=password):\n"
+        "    raise SystemExit('password verification failed')\n"
+        "print('created' if created else 'updated')\n"
+    )
+    proc = ctx.run(
         ctx.compose_base()
-        + [
-            "exec",
-            "-T",
-            "web",
-            "python",
-            "manage.py",
-            "createsuperuser",
-            "--noinput",
-            "--username",
-            username,
-            "--email",
-            email or f"{username}@localhost",
-        ],
-        env=env,
+        + ["exec", "-T", "web", "python", "manage.py", "shell", "-c", shell_script],
         check=False,
     )
+    if proc.returncode != 0:
+        return _fail(
+            "Failed to create superuser.",
+            manual=(proc.stderr or proc.stdout or "Unknown error").strip(),
+            cwd=str(ctx.install_dir),
+        )
     return check_superuser(ctx)
 
 
