@@ -417,6 +417,90 @@ def apply_awscli(ctx: InstallerContext, _payload: dict[str, Any]) -> StepResult:
 GHCR_REGISTRY = "ghcr.io"
 GHCR_IMAGE = "ivavalser/rumbleserver"
 GHCR_DEFAULT_USER = "rmbldeploy"
+GHCR_MANIFEST_ACCEPT = (
+    "application/vnd.docker.distribution.manifest.v2+json, "
+    "application/vnd.docker.distribution.manifest.list.v2+json, "
+    "application/vnd.oci.image.manifest.v1+json, "
+    "application/vnd.oci.image.index.v1+json"
+)
+
+
+def _ghcr_bearer_token(user: str, key: str) -> tuple[str | None, StepResult | None]:
+    token_url = (
+        f"https://{GHCR_REGISTRY}/token"
+        f"?service={GHCR_REGISTRY}&scope=repository:{GHCR_IMAGE}:pull"
+    )
+    auth = base64.b64encode(f"{user}:{key}".encode()).decode()
+    req = urllib.request.Request(
+        token_url,
+        headers={
+            "Authorization": f"Basic {auth}",
+            "User-Agent": "RumbleInstaller/1.0",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            token_payload = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403):
+            return None, _fail(
+                "Invalid GHCR access key — check the key from the RMBL Chat team.",
+            )
+        return None, _fail(f"GHCR auth failed (HTTP {exc.code}).")
+    except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
+        return None, _fail(f"Could not reach GHCR: {exc}")
+
+    bearer = token_payload.get("token") or token_payload.get("access_token") or ""
+    if not bearer:
+        return None, _fail("GHCR returned an empty token.")
+    return bearer, None
+
+
+def _ghcr_registry_request(
+    bearer: str,
+    path: str,
+    *,
+    accept: str = GHCR_MANIFEST_ACCEPT,
+) -> urllib.error.HTTPError | None:
+    url = f"https://{GHCR_REGISTRY}{path}"
+    req = urllib.request.Request(
+        url,
+        headers={
+            "Authorization": f"Bearer {bearer}",
+            "Accept": accept,
+            "User-Agent": "RumbleInstaller/1.0",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20):
+            return None
+    except urllib.error.HTTPError as exc:
+        return exc
+    except (urllib.error.URLError, OSError) as exc:
+        raise RuntimeError(f"Could not reach GHCR: {exc}") from exc
+
+
+def _ghcr_tag_list(bearer: str) -> list[str]:
+    url = f"https://{GHCR_REGISTRY}/v2/{GHCR_IMAGE}/tags/list"
+    req = urllib.request.Request(
+        url,
+        headers={
+            "Authorization": f"Bearer {bearer}",
+            "Accept": "application/json",
+            "User-Agent": "RumbleInstaller/1.0",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            payload = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403):
+            raise PermissionError("Cannot list image tags with this key.") from exc
+        raise RuntimeError(f"Could not list image tags (HTTP {exc.code}).") from exc
+    except (urllib.error.URLError, OSError) as exc:
+        raise RuntimeError(f"Could not reach GHCR: {exc}") from exc
+    tags = payload.get("tags") or []
+    return tags if isinstance(tags, list) else []
 
 
 def check_ghcr_key_remote(
@@ -431,52 +515,43 @@ def check_ghcr_key_remote(
     if not key:
         return _fail("Enter the image access key.")
 
-    token_url = (
-        f"https://{GHCR_REGISTRY}/token"
-        f"?service={GHCR_REGISTRY}&scope=repository:{GHCR_IMAGE}:pull"
+    bearer, err = _ghcr_bearer_token(user, key)
+    if err:
+        return err
+
+    manifest_exc = _ghcr_registry_request(
+        bearer,
+        f"/v2/{GHCR_IMAGE}/manifests/{tag}",
     )
-    auth = base64.b64encode(f"{user}:{key}".encode()).decode()
-    req = urllib.request.Request(token_url, headers={"Authorization": f"Basic {auth}"})
-    try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            token_payload = json.loads(resp.read().decode())
-    except urllib.error.HTTPError as exc:
-        if exc.code in (401, 403):
-            return _fail(
-                "Invalid GHCR access key — check the key from the RMBL Chat team.",
+    if manifest_exc is None:
+        return _ok(f"GHCR key is valid for {GHCR_REGISTRY}/{GHCR_IMAGE}:{tag}.")
+
+    if manifest_exc.code in (401, 403):
+        return _fail(
+            "Key is valid but cannot pull the server image — contact the RMBL Chat team.",
+        )
+
+    if manifest_exc.code == 404:
+        try:
+            tags = _ghcr_tag_list(bearer)
+        except PermissionError:
+            # Token works for auth scope — same as docker login in the old wizard.
+            return _ok(
+                f"GHCR key is valid (logged in as {user}).",
             )
-        return _fail(f"GHCR auth failed (HTTP {exc.code}).")
-    except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
-        return _fail(f"Could not reach GHCR: {exc}")
+        except RuntimeError as exc:
+            return _fail(str(exc))
 
-    bearer = token_payload.get("token") or token_payload.get("access_token") or ""
-    if not bearer:
-        return _fail("GHCR returned an empty token.")
-
-    manifest_url = f"https://{GHCR_REGISTRY}/v2/{GHCR_IMAGE}/manifests/{tag}"
-    manifest_req = urllib.request.Request(
-        manifest_url,
-        method="HEAD",
-        headers={
-            "Authorization": f"Bearer {bearer}",
-            "Accept": "application/vnd.docker.distribution.manifest.v2+json",
-        },
-    )
-    try:
-        with urllib.request.urlopen(manifest_req, timeout=20):
-            pass
-    except urllib.error.HTTPError as exc:
-        if exc.code in (401, 403):
+        if tag in tags:
+            return _ok(f"GHCR key is valid for {GHCR_REGISTRY}/{GHCR_IMAGE}:{tag}.")
+        if tags:
+            sample = ", ".join(tags[:5])
             return _fail(
-                "Key is valid but cannot pull the server image — contact the RMBL Chat team.",
+                f"Image tag '{tag}' not found. Available tags include: {sample}.",
             )
-        if exc.code == 404:
-            return _fail(f"Image tag '{tag}' not found in the registry.")
-        return _fail(f"Image pull check failed (HTTP {exc.code}).")
-    except (urllib.error.URLError, OSError) as exc:
-        return _fail(f"Could not verify image access: {exc}")
+        return _fail(f"Image tag '{tag}' not found in the registry.")
 
-    return _ok(f"GHCR key is valid for {GHCR_REGISTRY}/{GHCR_IMAGE}:{tag}.")
+    return _fail(f"Image pull check failed (HTTP {manifest_exc.code}).")
 
 
 def check_preflight(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
