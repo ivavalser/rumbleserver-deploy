@@ -16,6 +16,21 @@
       max-width: 820px; margin: 0 auto; padding: 24px 20px 48px;
       line-height: 1.55; color: var(--text); background: var(--bg);
     }
+    .page-head {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 16px; margin-bottom: 4px;
+    }
+    .lang-switch {
+      display: flex; gap: 4px; flex-shrink: 0;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 3px;
+    }
+    .lang-switch button {
+      border: none; background: transparent; color: var(--muted);
+      padding: 6px 12px; border-radius: 8px; cursor: pointer;
+      font-size: 0.85rem; font-weight: 600;
+    }
+    .lang-switch button.active { background: var(--accent); color: #fff; }
     h1 { font-size: 1.5rem; margin: 0 0 8px; }
     .lead { color: var(--muted); margin: 0 0 20px; }
     h2 { font-size: 1.12rem; margin: 1.75rem 0 0.75rem; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
@@ -81,39 +96,40 @@
   </style>
 </head>
 <body>
-  <h1>AWS S3 setup for Rumble Server</h1>
-  <p class="lead">Private S3 bucket + dedicated IAM user for file uploads. Choose automatic setup (installer creates everything) or manual setup in the AWS Console.</p>
+  <div class="page-head">
+    <div>
+      <h1 id="guide-title"></h1>
+      <p class="lead" id="guide-lead"></p>
+    </div>
+    <div class="lang-switch">
+      <button type="button" id="lang-en" class="active">EN</button>
+      <button type="button" id="lang-ru">RU</button>
+    </div>
+  </div>
 
   <div class="tabs" role="tablist">
-    <button type="button" class="active" role="tab" aria-selected="true" data-tab="auto">Auto</button>
-    <button type="button" role="tab" aria-selected="false" data-tab="manual">Manual</button>
+    <button type="button" class="active" role="tab" aria-selected="true" data-tab="auto" id="tab-btn-auto"></button>
+    <button type="button" role="tab" aria-selected="false" data-tab="manual" id="tab-btn-manual"></button>
   </div>
 
   <!-- AUTO -->
   <div id="tab-auto" class="tab-panel active" role="tabpanel">
-    <div class="note">
-      In the installer AWS step: paste <strong>bootstrap</strong> keys below, then click <em>Create S3 bucket &amp; IAM user</em>.
-      Bootstrap keys are <strong>not</strong> saved to <code>.env</code>.
-    </div>
+    <div class="note" id="auto-note"></div>
 
-    <h2>1. Bootstrap IAM user</h2>
-    <p>Bootstrap credentials are used <strong>once</strong> to create the bucket and scoped app user. Do not use them in the running server.</p>
+    <h2 id="auto-h2-1"></h2>
+    <p id="auto-p-1"></p>
 
-    <h3>1.1 Create the user</h3>
-    <ol>
-      <li><a href="https://console.aws.amazon.com/iam/home#/users" target="_blank" rel="noopener">IAM → Users → Create user</a></li>
-      <li>User name: <code>rumbleserver-bootstrap</code></li>
-      <li>Programmatic access only — no console login</li>
-    </ol>
+    <h3 id="auto-h3-1"></h3>
+    <ol id="auto-ol-1"></ol>
 
-    <h3>1.2 Attach permissions</h3>
-    <p>Easiest: attach AWS managed <code>AdministratorAccess</code> (deactivate the user after setup).</p>
-    <p>Or create a custom policy — copy JSON:</p>
+    <h3 id="auto-h3-2"></h3>
+    <p id="auto-p-2"></p>
+    <p id="auto-p-3"></p>
 
     <div class="policy-block">
       <div class="policy-block-head">
         <span>RumbleServerBootstrap</span>
-        <button type="button" class="copy-btn" data-copy-target="bootstrap-policy">Copy JSON</button>
+        <button type="button" class="copy-btn" data-copy-target="bootstrap-policy" id="copy-bootstrap"></button>
       </div>
       <pre id="bootstrap-policy">{
   "Version": "2012-10-17",
@@ -163,59 +179,37 @@
   ]
 }</pre>
     </div>
-    <p><small>Public access block action is <code>s3:PutBucketPublicAccessBlock</code> (not <code>s3:PutPublicAccessBlock</code>).</small></p>
-    <p><a href="https://console.aws.amazon.com/iam/home#/policies/create" target="_blank" rel="noopener">IAM → Policies → Create policy</a> → JSON → name <code>RumbleServerBootstrap</code> → attach to <code>rumbleserver-bootstrap</code>.</p>
+    <p id="auto-p-4"><small></small></p>
+    <p id="auto-p-5"></p>
 
-    <h3>1.3 Bootstrap access keys</h3>
-    <ol>
-      <li>User <code>rumbleserver-bootstrap</code> → <strong>Security credentials</strong></li>
-      <li><strong>Access keys → Create access key</strong> → <em>Application running outside AWS</em></li>
-      <li>Copy Access key ID + Secret (secret shown once)</li>
-      <li>Paste into installer → <em>Bootstrap access key ID</em> / <em>Bootstrap secret access key</em></li>
-    </ol>
+    <h3 id="auto-h3-3"></h3>
+    <ol id="auto-ol-2"></ol>
 
-    <div class="warn">
-      After success, delete the bootstrap access key or deactivate <code>rumbleserver-bootstrap</code>.
-    </div>
+    <div class="warn" id="auto-warn-1"></div>
+    <div class="warn" id="auto-warn-2"></div>
 
-    <div class="warn">
-      <strong>Re-running auto setup?</strong> The installer overwrites inline policy <code>RumbleServerS3Access</code> on the app user (always includes <code>ListBucket</code>), rotates access keys if needed, and updates the managed policy when bootstrap permissions allow.
-    </div>
-
-    <h2>2. In the installer</h2>
-    <ul>
-      <li>Enter bootstrap keys + bucket name + region</li>
-      <li>Click <strong>Create S3 bucket &amp; IAM user</strong></li>
-      <li>Wait for automatic S3 access verification (may retry while AWS propagates IAM)</li>
-      <li>App keys are filled automatically → click <strong>Run automatically</strong> to save <code>.env</code></li>
-    </ul>
+    <h2 id="auto-h2-2"></h2>
+    <ul id="auto-ul-1"></ul>
   </div>
 
   <!-- MANUAL -->
   <div id="tab-manual" class="tab-panel" role="tabpanel">
-    <div class="note">
-      Create bucket and app IAM user yourself, then paste <strong>app</strong> credentials into the installer (not bootstrap keys).
-    </div>
+    <div class="note" id="manual-note"></div>
 
-    <h2>1. Choose a region</h2>
-    <p>Pick a region close to your VPS (e.g. <code>eu-north-1</code>). Use the same value in <code>AWS_S3_REGION_NAME</code>.</p>
-    <p><a href="https://console.aws.amazon.com/s3/home" target="_blank" rel="noopener">Open S3 Console →</a></p>
+    <h2 id="manual-h2-1"></h2>
+    <p id="manual-p-1"></p>
+    <p id="manual-p-2"></p>
 
-    <h2>2. Create a bucket</h2>
-    <ol>
-      <li><strong>Create bucket</strong></li>
-      <li>Name: globally unique, lowercase (e.g. <code id="bucket-example">rumble-myserver-prod</code>)</li>
-      <li>Region: your chosen region</li>
-      <li><strong>Block all public access</strong> — keep enabled ✓</li>
-    </ol>
+    <h2 id="manual-h2-2"></h2>
+    <ol id="manual-ol-1"></ol>
 
-    <h2>3. IAM policy for the app user</h2>
-    <p><a href="https://console.aws.amazon.com/iam/home#/policies" target="_blank" rel="noopener">IAM → Policies → Create policy</a> → JSON — copy:</p>
+    <h2 id="manual-h2-3"></h2>
+    <p id="manual-p-3"></p>
 
     <div class="policy-block">
       <div class="policy-block-head">
         <span id="app-policy-label">RumbleServerS3-YOUR_BUCKET_NAME</span>
-        <button type="button" class="copy-btn" data-copy-target="policy-template">Copy JSON</button>
+        <button type="button" class="copy-btn" data-copy-target="policy-template" id="copy-app"></button>
       </div>
       <pre id="policy-template">{
   "Version": "2012-10-17",
@@ -244,50 +238,275 @@
   ]
 }</pre>
     </div>
-    <p><code>ListBucket</code> and <code>GetBucketLocation</code> go on <code>arn:aws:s3:::bucket-name</code> — <strong>without</strong> <code>/*</code>. Object actions go on <code>arn:aws:s3:::bucket-name/*</code>.</p>
-    <p>Putting <code>ListBucket</code> only on the <code>/*</code> ARN causes <em>GetBucketLocation ✓ / ListBucket ✗</em> in the installer.</p>
+    <p id="manual-p-4"></p>
+    <p id="manual-p-5"></p>
 
-    <div class="warn">
-      <strong>ListBucket fails but GetBucketLocation works?</strong> Open IAM → Policies → <code>RumbleServerS3-…</code> and verify JSON matches the template above.
-    </div>
+    <div class="warn" id="manual-warn-1"></div>
 
-    <h2>4. IAM user for the app</h2>
-    <ol>
-      <li><a href="https://console.aws.amazon.com/iam/home#/users" target="_blank" rel="noopener">IAM → Users → Create user</a></li>
-      <li>Name: <code>rumbleserver-s3</code> (or <code>rumbleserver-s3-YOUR_BUCKET</code>)</li>
-      <li>Attach the policy from step 3</li>
-      <li><strong>Security credentials → Create access key</strong> → <em>Application running outside AWS</em></li>
-      <li>Paste into installer as <em>App access key ID</em> / <em>App secret access key</em></li>
-    </ol>
+    <h2 id="manual-h2-4"></h2>
+    <ol id="manual-ol-2"></ol>
 
-    <h2>5. In the installer</h2>
-    <ul>
-      <li>Region + bucket name</li>
-      <li>App access key ID + secret</li>
-      <li><strong>Check S3 access</strong> — verifies GetBucketLocation, ListBucket, PutObject, GetObject, DeleteObject</li>
-      <li><strong>Run automatically</strong> — writes <code>.env</code></li>
-    </ul>
+    <h2 id="manual-h2-5"></h2>
+    <ul id="manual-ul-1"></ul>
   </div>
 
-  <h2>Values written to .env</h2>
-  <ul>
-    <li><code>AWS_ACCESS_KEY_ID</code> — app user access key</li>
-    <li><code>AWS_SECRET_ACCESS_KEY</code> — app user secret</li>
-    <li><code>AWS_STORAGE_BUCKET_NAME</code> — bucket name</li>
-    <li><code>AWS_S3_REGION_NAME</code> — e.g. <code>eu-north-1</code></li>
-    <li><code>AWS_S3_ENDPOINT_URL</code> — <code>https://s3.&lt;region&gt;.amazonaws.com</code></li>
-  </ul>
+  <h2 id="env-h2"></h2>
+  <ul id="env-ul"></ul>
 
   <script>
-    const bucket = new URLSearchParams(location.search).get('bucket');
-    if (bucket) {
+    const LANG_KEY = 'installer_lang';
+
+    const GUIDE = {
+      en: {
+        pageTitle: 'Rumble Server — AWS S3 Setup',
+        title: 'AWS S3 setup for Rumble Server',
+        lead: 'Private S3 bucket + dedicated IAM user for file uploads. Choose automatic setup (installer creates everything) or manual setup in the AWS Console.',
+        tabAuto: 'Auto',
+        tabManual: 'Manual',
+        copyJson: 'Copy JSON',
+        copied: 'Copied!',
+        autoNote: 'In the installer AWS step: paste <strong>bootstrap</strong> keys below, then click <em>Create S3 bucket &amp; IAM user</em>. Bootstrap keys are <strong>not</strong> saved to <code>.env</code>.',
+        autoH2_1: '1. Bootstrap IAM user',
+        autoP_1: 'Bootstrap credentials are used <strong>once</strong> to create the bucket and scoped app user. Do not use them in the running server.',
+        autoH3_1: '1.1 Create the user',
+        autoOl_1: [
+          '<a href="https://console.aws.amazon.com/iam/home#/users" target="_blank" rel="noopener">IAM → Users → Create user</a>',
+          'User name: <code>rumbleserver-bootstrap</code>',
+          'Programmatic access only — no console login',
+        ],
+        autoH3_2: '1.2 Attach permissions',
+        autoP_2: 'Easiest: attach AWS managed <code>AdministratorAccess</code> (deactivate the user after setup).',
+        autoP_3: 'Or create a custom policy — copy JSON:',
+        autoP_4: 'Public access block action is <code>s3:PutBucketPublicAccessBlock</code> (not <code>s3:PutPublicAccessBlock</code>).',
+        autoP_5: '<a href="https://console.aws.amazon.com/iam/home#/policies/create" target="_blank" rel="noopener">IAM → Policies → Create policy</a> → JSON → name <code>RumbleServerBootstrap</code> → attach to <code>rumbleserver-bootstrap</code>.',
+        autoH3_3: '1.3 Bootstrap access keys',
+        autoOl_2: [
+          'User <code>rumbleserver-bootstrap</code> → <strong>Security credentials</strong>',
+          '<strong>Access keys → Create access key</strong> → <em>Application running outside AWS</em>',
+          'Copy Access key ID + Secret (secret shown once)',
+          'Paste into installer → <em>Bootstrap access key ID</em> / <em>Bootstrap secret access key</em>',
+        ],
+        autoWarn_1: 'After success, delete the bootstrap access key or deactivate <code>rumbleserver-bootstrap</code>.',
+        autoWarn_2: '<strong>Re-running auto setup?</strong> The installer overwrites inline policy <code>RumbleServerS3Access</code> on the app user (always includes <code>ListBucket</code>), rotates access keys if needed, and updates the managed policy when bootstrap permissions allow.',
+        autoH2_2: '2. In the installer',
+        autoUl_1: [
+          'Enter bootstrap keys + bucket name + region',
+          'Click <strong>Create S3 bucket &amp; IAM user</strong>',
+          'Wait for automatic S3 access verification (may retry while AWS propagates IAM)',
+          'App keys are filled automatically → click <strong>Run automatically</strong> to save <code>.env</code>',
+        ],
+        manualNote: 'Create bucket and app IAM user yourself, then paste <strong>app</strong> credentials into the installer (not bootstrap keys).',
+        manualH2_1: '1. Choose a region',
+        manualP_1: 'Pick a region close to your VPS (e.g. <code>eu-north-1</code>). Use the same value in <code>AWS_S3_REGION_NAME</code>.',
+        manualP_2: '<a href="https://console.aws.amazon.com/s3/home" target="_blank" rel="noopener">Open S3 Console →</a>',
+        manualH2_2: '2. Create a bucket',
+        manualOl_1: [
+          '<strong>Create bucket</strong>',
+          'Name: globally unique, lowercase (e.g. <code id="bucket-example">rumble-myserver-prod</code>)',
+          'Region: your chosen region',
+          '<strong>Block all public access</strong> — keep enabled ✓',
+        ],
+        manualH2_3: '3. IAM policy for the app user',
+        manualP_3: '<a href="https://console.aws.amazon.com/iam/home#/policies" target="_blank" rel="noopener">IAM → Policies → Create policy</a> → JSON — copy:',
+        manualP_4: '<code>ListBucket</code> and <code>GetBucketLocation</code> go on <code>arn:aws:s3:::bucket-name</code> — <strong>without</strong> <code>/*</code>. Object actions go on <code>arn:aws:s3:::bucket-name/*</code>.',
+        manualP_5: 'Putting <code>ListBucket</code> only on the <code>/*</code> ARN causes <em>GetBucketLocation ✓ / ListBucket ✗</em> in the installer.',
+        manualWarn_1: '<strong>ListBucket fails but GetBucketLocation works?</strong> Open IAM → Policies → <code>RumbleServerS3-…</code> and verify JSON matches the template above.',
+        manualH2_4: '4. IAM user for the app',
+        manualOl_2: [
+          '<a href="https://console.aws.amazon.com/iam/home#/users" target="_blank" rel="noopener">IAM → Users → Create user</a>',
+          'Name: <code>rumbleserver-s3</code> (or <code>rumbleserver-s3-YOUR_BUCKET</code>)',
+          'Attach the policy from step 3',
+          '<strong>Security credentials → Create access key</strong> → <em>Application running outside AWS</em>',
+          'Paste into installer as <em>App access key ID</em> / <em>App secret access key</em>',
+        ],
+        manualH2_5: '5. In the installer',
+        manualUl_1: [
+          'Region + bucket name',
+          'App access key ID + secret',
+          '<strong>Check S3 access</strong> — verifies GetBucketLocation, ListBucket, PutObject, GetObject, DeleteObject',
+          '<strong>Run automatically</strong> — writes <code>.env</code>',
+        ],
+        envH2: 'Values written to .env',
+        envUl: [
+          '<code>AWS_ACCESS_KEY_ID</code> — app user access key',
+          '<code>AWS_SECRET_ACCESS_KEY</code> — app user secret',
+          '<code>AWS_STORAGE_BUCKET_NAME</code> — bucket name',
+          '<code>AWS_S3_REGION_NAME</code> — e.g. <code>eu-north-1</code>',
+          '<code>AWS_S3_ENDPOINT_URL</code> — <code>https://s3.&lt;region&gt;.amazonaws.com</code>',
+        ],
+      },
+      ru: {
+        pageTitle: 'Rumble Server — настройка AWS S3',
+        title: 'Настройка AWS S3 для Rumble Server',
+        lead: 'Закрытый S3-бакет и отдельный IAM-пользователь для загрузки файлов. Можно настроить автоматически (установщик всё создаст сам) или вручную в консоли AWS.',
+        tabAuto: 'Авто',
+        tabManual: 'Вручную',
+        copyJson: 'Скопировать JSON',
+        copied: 'Скопировано!',
+        autoNote: 'На шаге AWS в установщике: вставь <strong>bootstrap</strong>-ключи, затем нажми <em>Создать S3-бакет и IAM-пользователя</em>. Bootstrap-ключи <strong>не</strong> сохраняются в <code>.env</code>.',
+        autoH2_1: '1. Bootstrap IAM-пользователь',
+        autoP_1: 'Bootstrap-ключи нужны <strong>один раз</strong> — чтобы создать бакет и IAM-пользователя для приложения. Не используй их на работающем сервере.',
+        autoH3_1: '1.1 Создай пользователя',
+        autoOl_1: [
+          '<a href="https://console.aws.amazon.com/iam/home#/users" target="_blank" rel="noopener">IAM → Users → Create user</a>',
+          'Имя: <code>rumbleserver-bootstrap</code>',
+          'Только программный доступ — без входа в консоль',
+        ],
+        autoH3_2: '1.2 Назначь права',
+        autoP_2: 'Проще всего: прикрепи управляемую политику AWS <code>AdministratorAccess</code> (после настройки деактивируй пользователя).',
+        autoP_3: 'Или создай свою политику — скопируй JSON:',
+        autoP_4: 'Для блокировки публичного доступа нужно действие <code>s3:PutBucketPublicAccessBlock</code> (не <code>s3:PutPublicAccessBlock</code>).',
+        autoP_5: '<a href="https://console.aws.amazon.com/iam/home#/policies/create" target="_blank" rel="noopener">IAM → Policies → Create policy</a> → JSON → имя <code>RumbleServerBootstrap</code> → прикрепи к <code>rumbleserver-bootstrap</code>.',
+        autoH3_3: '1.3 Bootstrap-ключи доступа',
+        autoOl_2: [
+          'Пользователь <code>rumbleserver-bootstrap</code> → <strong>Security credentials</strong>',
+          '<strong>Access keys → Create access key</strong> → <em>Application running outside AWS</em>',
+          'Скопируй Access Key ID и Secret (секрет показывается один раз)',
+          'Вставь в установщик → <em>Bootstrap Access Key ID</em> / <em>Bootstrap Secret Access Key</em>',
+        ],
+        autoWarn_1: 'После успешной настройки удали bootstrap-ключ или деактивируй <code>rumbleserver-bootstrap</code>.',
+        autoWarn_2: '<strong>Запускаешь авто-настройку повторно?</strong> Установщик перезапишет inline-политику <code>RumbleServerS3Access</code> у пользователя приложения (всегда с <code>ListBucket</code>), при необходимости сменит ключи доступа и обновит managed policy, если bootstrap-права это позволяют.',
+        autoH2_2: '2. В установщике',
+        autoUl_1: [
+          'Укажи bootstrap-ключи, имя бакета и регион',
+          'Нажми <strong>Создать S3-бакет и IAM-пользователя</strong>',
+          'Дождись автоматической проверки доступа к S3 (возможны повторы, пока AWS применяет IAM)',
+          'Ключи приложения подставятся сами → нажми <strong>Выполнить шаг</strong>, чтобы сохранить <code>.env</code>',
+        ],
+        manualNote: 'Создай бакет и IAM-пользователя для приложения сам, затем вставь <strong>ключи приложения</strong> в установщик (не bootstrap-ключи).',
+        manualH2_1: '1. Выбери регион',
+        manualP_1: 'Выбери регион ближе к VPS (например, <code>eu-north-1</code>). То же значение укажи в <code>AWS_S3_REGION_NAME</code>.',
+        manualP_2: '<a href="https://console.aws.amazon.com/s3/home" target="_blank" rel="noopener">Открыть консоль S3 →</a>',
+        manualH2_2: '2. Создай бакет',
+        manualOl_1: [
+          '<strong>Create bucket</strong>',
+          'Имя: глобально уникальное, строчными буквами (например, <code id="bucket-example">rumble-myserver-prod</code>)',
+          'Регион: выбранный на шаге 1',
+          '<strong>Block all public access</strong> — оставь включённым ✓',
+        ],
+        manualH2_3: '3. IAM-политика для пользователя приложения',
+        manualP_3: '<a href="https://console.aws.amazon.com/iam/home#/policies" target="_blank" rel="noopener">IAM → Policies → Create policy</a> → JSON — скопируй:',
+        manualP_4: '<code>ListBucket</code> и <code>GetBucketLocation</code> указываются для <code>arn:aws:s3:::bucket-name</code> — <strong>без</strong> <code>/*</code>. Действия с объектами — для <code>arn:aws:s3:::bucket-name/*</code>.',
+        manualP_5: 'Если <code>ListBucket</code> указан только для ARN с <code>/*</code>, в установщике будет <em>GetBucketLocation ✓ / ListBucket ✗</em>.',
+        manualWarn_1: '<strong>ListBucket не проходит, а GetBucketLocation — да?</strong> Открой IAM → Policies → <code>RumbleServerS3-…</code> и сверь JSON с шаблоном выше.',
+        manualH2_4: '4. IAM-пользователь для приложения',
+        manualOl_2: [
+          '<a href="https://console.aws.amazon.com/iam/home#/users" target="_blank" rel="noopener">IAM → Users → Create user</a>',
+          'Имя: <code>rumbleserver-s3</code> (или <code>rumbleserver-s3-YOUR_BUCKET</code>)',
+          'Прикрепи политику из шага 3',
+          '<strong>Security credentials → Create access key</strong> → <em>Application running outside AWS</em>',
+          'Вставь в установщик как <em>Access Key ID приложения</em> / <em>Secret Access Key приложения</em>',
+        ],
+        manualH2_5: '5. В установщике',
+        manualUl_1: [
+          'Регион и имя бакета',
+          'Access Key ID и Secret Access Key приложения',
+          '<strong>Проверить доступ к S3</strong> — проверяет GetBucketLocation, ListBucket, PutObject, GetObject, DeleteObject',
+          '<strong>Выполнить шаг</strong> — записывает <code>.env</code>',
+        ],
+        envH2: 'Что попадает в .env',
+        envUl: [
+          '<code>AWS_ACCESS_KEY_ID</code> — Access Key ID пользователя приложения',
+          '<code>AWS_SECRET_ACCESS_KEY</code> — Secret Access Key пользователя приложения',
+          '<code>AWS_STORAGE_BUCKET_NAME</code> — имя бакета',
+          '<code>AWS_S3_REGION_NAME</code> — например, <code>eu-north-1</code>',
+          '<code>AWS_S3_ENDPOINT_URL</code> — <code>https://s3.&lt;region&gt;.amazonaws.com</code>',
+        ],
+      },
+    };
+
+    const params = new URLSearchParams(location.search);
+    let lang = params.get('lang') || localStorage.getItem(LANG_KEY) || 'en';
+    if (lang !== 'ru') lang = 'en';
+
+    function t(key) {
+      return (GUIDE[lang] && GUIDE[lang][key]) || GUIDE.en[key] || '';
+    }
+
+    function fillList(el, items) {
+      if (!el || !items) return;
+      el.innerHTML = items.map(item => `<li>${item}</li>`).join('');
+    }
+
+    function applyLang(l) {
+      lang = l === 'ru' ? 'ru' : 'en';
+      localStorage.setItem(LANG_KEY, lang);
+      document.documentElement.lang = lang;
+      document.title = t('pageTitle');
+
+      document.getElementById('lang-en').classList.toggle('active', lang === 'en');
+      document.getElementById('lang-ru').classList.toggle('active', lang === 'ru');
+
+      document.getElementById('guide-title').textContent = t('title');
+      document.getElementById('guide-lead').textContent = t('lead');
+      document.getElementById('tab-btn-auto').textContent = t('tabAuto');
+      document.getElementById('tab-btn-manual').textContent = t('tabManual');
+
+      document.getElementById('auto-note').innerHTML = t('autoNote');
+      document.getElementById('auto-h2-1').textContent = t('autoH2_1');
+      document.getElementById('auto-p-1').innerHTML = t('autoP_1');
+      document.getElementById('auto-h3-1').textContent = t('autoH3_1');
+      fillList(document.getElementById('auto-ol-1'), GUIDE[lang].autoOl_1);
+      document.getElementById('auto-h3-2').textContent = t('autoH3_2');
+      document.getElementById('auto-p-2').innerHTML = t('autoP_2');
+      document.getElementById('auto-p-3').textContent = t('autoP_3');
+      document.getElementById('auto-p-4').querySelector('small').innerHTML = t('autoP_4');
+      document.getElementById('auto-p-5').innerHTML = t('autoP_5');
+      document.getElementById('auto-h3-3').textContent = t('autoH3_3');
+      fillList(document.getElementById('auto-ol-2'), GUIDE[lang].autoOl_2);
+      document.getElementById('auto-warn-1').innerHTML = t('autoWarn_1');
+      document.getElementById('auto-warn-2').innerHTML = t('autoWarn_2');
+      document.getElementById('auto-h2-2').textContent = t('autoH2_2');
+      fillList(document.getElementById('auto-ul-1'), GUIDE[lang].autoUl_1);
+
+      document.getElementById('manual-note').innerHTML = t('manualNote');
+      document.getElementById('manual-h2-1').textContent = t('manualH2_1');
+      document.getElementById('manual-p-1').innerHTML = t('manualP_1');
+      document.getElementById('manual-p-2').innerHTML = t('manualP_2');
+      document.getElementById('manual-h2-2').textContent = t('manualH2_2');
+      fillList(document.getElementById('manual-ol-1'), GUIDE[lang].manualOl_1);
+      document.getElementById('manual-h2-3').textContent = t('manualH2_3');
+      document.getElementById('manual-p-3').innerHTML = t('manualP_3');
+      document.getElementById('manual-p-4').innerHTML = t('manualP_4');
+      document.getElementById('manual-p-5').innerHTML = t('manualP_5');
+      document.getElementById('manual-warn-1').innerHTML = t('manualWarn_1');
+      document.getElementById('manual-h2-4').textContent = t('manualH2_4');
+      fillList(document.getElementById('manual-ol-2'), GUIDE[lang].manualOl_2);
+      document.getElementById('manual-h2-5').textContent = t('manualH2_5');
+      fillList(document.getElementById('manual-ul-1'), GUIDE[lang].manualUl_1);
+
+      document.getElementById('env-h2').textContent = t('envH2');
+      fillList(document.getElementById('env-ul'), GUIDE[lang].envUl);
+
+      document.getElementById('copy-bootstrap').textContent = t('copyJson');
+      document.getElementById('copy-app').textContent = t('copyJson');
+
+      applyBucketName();
+
+      params.set('lang', lang);
+      history.replaceState(null, '', '?' + params.toString());
+    }
+
+    function applyBucketName() {
+      const bucket = params.get('bucket');
+      if (!bucket) return;
       const tpl = document.getElementById('policy-template');
-      tpl.textContent = tpl.textContent.replaceAll('YOUR_BUCKET_NAME', bucket);
+      if (tpl && !tpl.dataset.bucketApplied) {
+        tpl.textContent = tpl.textContent.replaceAll('YOUR_BUCKET_NAME', bucket);
+        tpl.dataset.bucketApplied = '1';
+      }
       const label = document.getElementById('app-policy-label');
       if (label) label.textContent = 'RumbleServerS3-' + bucket;
       const ex = document.getElementById('bucket-example');
       if (ex) ex.textContent = bucket;
     }
+
+    document.getElementById('lang-en').onclick = () => applyLang('en');
+    document.getElementById('lang-ru').onclick = () => applyLang('ru');
+
+    window.addEventListener('storage', e => {
+      if (e.key === LANG_KEY && e.newValue) applyLang(e.newValue);
+    });
 
     document.querySelectorAll('.tabs button').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -299,13 +518,12 @@
         document.querySelectorAll('.tab-panel').forEach(p => {
           p.classList.toggle('active', p.id === 'tab-' + tab);
         });
-        const params = new URLSearchParams(location.search);
         params.set('tab', tab);
         history.replaceState(null, '', '?' + params.toString());
       });
     });
 
-    const initialTab = new URLSearchParams(location.search).get('tab');
+    const initialTab = params.get('tab');
     if (initialTab === 'manual') {
       document.querySelector('.tabs button[data-tab="manual"]')?.click();
     }
@@ -327,14 +545,16 @@
           document.execCommand('copy');
           document.body.removeChild(ta);
         }
-        btn.textContent = 'Copied!';
+        btn.textContent = t('copied');
         btn.classList.add('copied');
         setTimeout(() => {
-          btn.textContent = 'Copy JSON';
+          btn.textContent = t('copyJson');
           btn.classList.remove('copied');
         }, 2000);
       });
     });
+
+    applyLang(lang);
   </script>
 </body>
 </html>

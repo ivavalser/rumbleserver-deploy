@@ -77,7 +77,7 @@
     .status.info { background: rgba(110,91,233,.14); border: 1px solid rgba(110,91,233,.28); color: var(--purple-light); }
     .done-badge { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 100px; background: var(--ok-bg); color: var(--ok); font-weight: 600; font-size: 0.88rem; margin-bottom: 12px; font-family: var(--font-heading); }
     .manual { background: var(--navy-deep); border: 1px solid var(--border); border-radius: 12px; padding: 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; white-space: pre-wrap; margin-bottom: 16px; color: rgba(255,255,255,.7); }
-    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; margin-bottom: 0; }
     .form-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0 20px; }
     button.btn { border: none; border-radius: var(--radius); padding: 12px 20px; font-size: 0.9rem; font-weight: 600; cursor: pointer; font-family: var(--font-heading); transition: background .2s, transform .15s, box-shadow .2s; }
     button.primary { background: var(--purple); color: #fff; box-shadow: 0 4px 16px rgba(110,91,233,.25); }
@@ -197,7 +197,7 @@
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;
     }
     .panel.step-busy .actions button { pointer-events: none; opacity: 0.55; }
-    .finish-panel { display: flex; flex-direction: column; gap: 16px; }
+    .finish-panel { display: flex; flex-direction: column; gap: 16px; margin: 0; }
     .finish-loading { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 0.9rem; padding: 8px 0; }
     .finish-hero {
       display: flex; gap: 20px; align-items: center; padding: 24px;
@@ -212,6 +212,7 @@
       background: rgba(255,255,255,.04); border: 1px solid var(--border); border-radius: 16px; padding: 16px 18px;
     }
     .finish-card h4 { margin: 0 0 10px; font-size: 0.92rem; font-weight: 600; color: var(--text); font-family: var(--font-heading); }
+    .finish-card h4:last-child { margin-bottom: 0; }
     .finish-admin-link {
       display: inline-block; margin-top: 10px; padding: 12px 20px; background: var(--purple); color: #fff;
       border-radius: var(--radius); text-decoration: none; font-weight: 600; font-size: 0.9rem; font-family: var(--font-heading);
@@ -221,10 +222,18 @@
     .finish-meta { font-size: 0.85rem; color: var(--muted); line-height: 1.65; }
     .finish-meta code { color: var(--purple-light); font-size: 0.82rem; word-break: break-all; }
     .finish-commands {
-      margin: 0; padding: 12px; background: var(--navy-deep); border: 1px solid var(--border); border-radius: 12px;
+      margin: 0; padding: 12px 14px; background: var(--navy-deep); border: 1px solid var(--border); border-radius: 12px;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem;
       white-space: pre-wrap; color: rgba(255,255,255,.7); line-height: 1.5;
+      overflow-x: auto;
     }
+    #step-panel:has(.finish-panel) .actions {
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+    #step-panel.finish-step .desc,
+    #step-panel.finish-step #step-status { display: none; }
     /* Start screen */
     #screen-start { min-height: 100vh; background: var(--navy); position: relative; overflow: hidden; }
     #screen-wizard { min-height: 100vh; background: var(--bg); }
@@ -540,89 +549,89 @@
       },
       ru: {
         title: 'RMBL — установщик сервера',
-        loading: 'Загрузка...',
-        directory: 'Директория',
-        log: 'Лог',
+        loading: 'Загрузка…',
+        directory: 'Каталог',
+        log: 'Журнал',
         sidebarSteps: 'Шаги установки',
-        hint: 'Нажми «Выполнить этот шаг» или проверь, когда будешь готов.',
-        runAuto: 'Выполнить этот шаг',
-        verify: 'Я сделал сам — проверить',
-        skip: 'Пропустить, сделаю позже',
-        next: 'К следующему шагу →',
-        recheck: 'Перепроверить',
-        viewDetails: 'Показать детали',
-        doneBadge: 'Выполнено ✓',
-        alreadyDone: 'Уже установлено — пропускаю и иду дальше.',
+        hint: 'Нажми «Выполнить шаг» или «Проверить», когда будешь готов.',
+        runAuto: 'Выполнить шаг',
+        verify: 'Сделал сам — проверить',
+        skip: 'Пропустить, настрою позже',
+        next: 'Дальше →',
+        recheck: 'Проверить снова',
+        viewDetails: 'Подробности',
+        doneBadge: 'Готово ✓',
+        alreadyDone: 'Уже установлено — перехожу дальше.',
         finish: 'Завершить установку',
-        finishConfirm: 'Завершить установщик? Порт 8800 будет закрыт.',
-        shuttingDown: 'Установщик останавливается. Можно закрыть вкладку.',
-        shutdownTitle: 'Сервер работает!',
-        shutdownDesc: 'Установщик выключен. RMBL-сервер продолжает работать — вкладку можно закрыть.',
-        noToken: 'Нужен token в URL: ?token=...',
+        finishConfirm: 'Остановить установщик? Порт 8800 будет закрыт.',
+        shuttingDown: 'Установщик завершает работу. Вкладку можно закрыть.',
+        shutdownTitle: 'Сервер запущен!',
+        shutdownDesc: 'Установщик остановлен. Сервер RMBL продолжает работать — вкладку можно закрыть.',
+        noToken: 'В адресе нужен параметр token: ?token=...',
         error: 'Ошибка',
-        loadingConnect: 'Подключаюсь к установщику…',
+        loadingConnect: 'Подключение к установщику…',
         loadingBusy: 'На сервере ещё выполняется шаг',
-        loadingBusyDesc: 'Установщик занят — жду завершения. Страница обновится автоматически.',
-        loadingRetry: 'Не могу достучаться до установщика — повторяю…',
+        loadingBusyDesc: 'Ждём завершения — страница обновится сама.',
+        loadingRetry: 'Не удалось подключиться — повторяем…',
         mascotSays: 'Rumble говорит',
-        modeAuto: 'Авто-режим',
+        modeAuto: 'Авто',
         modeManual: 'Пошагово',
         modePause: 'Пауза',
-        modeResume: 'Продолжить авто',
-        startHeadline: 'Поднимем\nтвой сервер',
-        startSub: 'Мастер настроит RMBL Chat за ~10 минут. Выбери, как проходить установку.',
-        startBubble: "Let's rumble!",
+        modeResume: 'Продолжить',
+        startHeadline: 'Настроим\nтвой сервер',
+        startSub: 'Мастер установки настроит RMBL Chat примерно за 10 минут. Выбери, как проходить шаги.',
+        startBubble: 'Погнали!',
         startAutoTag: 'Рекомендуется',
         startAutoTitle: 'Автоматическая установка',
-        startAutoDesc: 'Шаги без ввода запускаются сами. Остановлюсь только там, где нужны ключи, домен или пароль.',
+        startAutoDesc: 'Простые шаги выполняются сами. Остановлюсь только там, где нужны ключи, домен или пароль.',
         startAutoBtn: 'Начать установку',
-        startManualTitle: 'Пошаговый контроль',
-        startManualDesc: 'Каждый шаг запускаешь ты сам. Удобно, если хочешь видеть, что и когда происходит.',
+        startManualTitle: 'Пошаговый режим',
+        startManualDesc: 'Каждый шаг запускаешь сам — удобно, если хочешь контролировать процесс.',
         startManualBtn: 'Идти по шагам',
         startResume: 'Продолжить установку →',
-        buildingServer: 'Собираю твой сервер…',
+        buildingServer: 'Собираем сервер…',
         working: 'Выполняется…',
-        busySystem: 'Устанавливаю базовые пакеты',
-        busyUfw: 'Настраиваю файрвол',
-        busyDocker: 'Устанавливаю Docker — около минуты',
-        busyGhcr: 'Захожу в реестр',
-        busyEnv: 'Сохраняю конфигурацию',
-        busyAwscli: 'Устанавливаю AWS CLI',
-        busySuperuser: 'Создаю аккаунт админа',
-        busyDeploy: 'Деплою приложение',
+        busySystem: 'Устанавливаем системные пакеты',
+        busyUfw: 'Настраиваем файрвол',
+        busyDocker: 'Устанавливаем Docker — около минуты',
+        busyGhcr: 'Авторизуемся в реестре образов',
+        busyEnv: 'Сохраняем конфигурацию',
+        busyAwscli: 'Устанавливаем AWS CLI',
+        busySuperuser: 'Создаём учётную запись администратора',
+        busyDeploy: 'Разворачиваем приложение',
         ghcrKey: 'Ключ GHCR',
-        ghcrKeyPh: 'Ключ от мейнтейнера',
+        ghcrKeyPh: 'Ключ от команды RMBL',
         ghcrUser: 'Пользователь GHCR',
         domain: 'Домен сервера',
-        domainRequired: 'Введи домен сервера',
-        domainHelp: 'Для работы сервера нужен домен — по нему клиенты подключаются и выдаётся HTTPS. По умолчанию укажи основной домен (например, example.com) и создай A-запись на @. Субдомен — только если на основном домене уже что-то работает.',
+        domainRequired: 'Укажи домен сервера',
+        domainHelp: 'Серверу нужен домен для HTTPS и подключения клиентов. Обычно указывают основной домен (например, example.com) и создают A-запись для @. Субдомен — только если на основном домене уже работает другой сайт.',
         domainPlaceholder: 'example.com',
-        domainDnsHintRoot: 'У регистратора домена создай A-запись для основного домена:',
+        domainDnsHintRoot: 'У регистратора домена создай A-запись для корневого домена:',
         domainDnsHintSub: 'Указан субдомен — создай для него A-запись:',
         domainDnsTitle: 'DNS-запись',
-        envSectionMode: 'Режим установки',
+        envSectionMode: 'Режим настройки',
         envSectionDomain: 'Домен и DNS',
         envSectionDatabase: 'База данных и Redis',
-        awsStepHelp: 'Rumble хранит файлы в приватном S3 bucket. Создай IAM-пользователя для приложения или используй автоматическую настройку с bootstrap-ключами.',
-        awsBootstrapHelp: 'Bootstrap-ключи — от отдельного IAM-пользователя с правами создавать S3 bucket и IAM users. Смотри инструкцию — bootstrap-ключи не клади в .env.',
+        awsStepHelp: 'Rumble хранит загруженные файлы в закрытом S3-бакете. Создай IAM-пользователя для приложения или воспользуйся автоматической настройкой с bootstrap-ключами.',
+        awsBootstrapHelp: 'Bootstrap-ключи — от отдельного IAM-пользователя с правом создавать S3-бакеты и IAM-пользователей. Подробности в инструкции. Не сохраняй bootstrap-ключи в .env.',
         awsSectionAuto: 'Автоматическая настройка',
-        awsSectionBucket: 'Bucket и регион',
+        awsSectionBucket: 'Бакет и регион',
         awsSectionApp: 'Ключи приложения (для .env)',
         checkAwsAccess: 'Проверить доступ к S3',
-        awsProvisioning: 'Создаём bucket и IAM-пользователя…',
+        awsProvisioning: 'Создаём бакет и IAM-пользователя…',
         awsChecking: 'Проверяем доступ к S3…',
         awsWorking: 'Выполняется…',
-        awsVerifyWaiting: 'Ждём распространения credentials в AWS ({s} с)…',
+        awsVerifyWaiting: 'Ждём, пока AWS применит новые ключи ({s} с)…',
         awsVerifyWaitDone: 'Ожидание завершено',
-        awsVerifyAttempt: 'Проверка доступа к S3 (попытка {n}/{max})…',
-        awsVerifyAttemptOk: 'Доступ к S3 подтверждён (попытка {n}/{max})',
-        awsVerifyAttemptFail: 'Попытка {n}/{max} не прошла',
+        awsVerifyAttempt: 'Проверка доступа к S3 (попытка {n} из {max})…',
+        awsVerifyAttemptOk: 'Доступ к S3 подтверждён (попытка {n} из {max})',
+        awsVerifyAttemptFail: 'Попытка {n} из {max} не удалась',
         awsVerifyRetryWait: 'Повтор через {s} с…',
         awsVerifyRetryDone: 'Пауза перед повтором завершена',
         awsVerifySuccess: 'Все проверки S3 пройдены',
-        awsVerifyAllFailed: 'Проверка не прошла после {max} попыток',
-        awsVerifyStopped: 'Остановлено — исправь IAM policy (ожидание не поможет)',
-        awsSavedVerified: 'AWS настроен и проверен.',
+        awsVerifyAllFailed: 'Проверка не удалась после {max} попыток',
+        awsVerifyStopped: 'Остановлено — исправь политику IAM (ждать бессмысленно)',
+        awsSavedVerified: 'Настройки AWS сохранены и проверены.',
         serverIp: 'IP этого сервера',
         serverIpUnknown: 'Не удалось определить автоматически — смотри панель VPS',
         dnsType: 'Тип',
@@ -632,28 +641,28 @@
         checkDnsRecords: 'Проверить DNS-записи',
         allowedHosts: 'ALLOWED_HOSTS',
         allowedHostsHelp: 'Обычно совпадает с доменом; заполняется автоматически',
-        envSimple: 'Простая установка (рекомендуется)',
-        envSimpleDesc: 'Автогенерация паролей PostgreSQL и Redis в Docker',
-        envAdvanced: 'Продвинутая установка',
-        envAdvancedDesc: 'Внешние PostgreSQL / Redis со своими данными',
+        envSimple: 'Простая настройка (рекомендуется)',
+        envSimpleDesc: 'Пароли PostgreSQL и Redis генерируются автоматически для Docker',
+        envAdvanced: 'Расширенная настройка',
+        envAdvancedDesc: 'Внешние PostgreSQL и Redis со своими параметрами подключения',
         awsTitle: 'AWS S3 (обязательно)',
-        awsGuide: 'Открыть инструкцию AWS',
-        awsProvision: 'Создать bucket и IAM-пользователя',
-        awsBootstrapKey: 'Bootstrap access key ID',
-        awsBootstrapSecret: 'Bootstrap secret access key',
+        awsGuide: 'Открыть инструкцию по AWS',
+        awsProvision: 'Создать S3-бакет и IAM-пользователя',
+        awsBootstrapKey: 'Bootstrap Access Key ID',
+        awsBootstrapSecret: 'Bootstrap Secret Access Key',
         awsRegion: 'Регион',
-        awsBucket: 'Имя bucket',
-        awsAccessKey: 'App access key ID',
-        awsSecretKey: 'App secret access key',
-        deployWorking: 'Деплой…',
-        deployPulling: 'Скачиваем образы контейнеров…',
+        awsBucket: 'Имя бакета',
+        awsAccessKey: 'Access Key ID приложения',
+        awsSecretKey: 'Secret Access Key приложения',
+        deployWorking: 'Развёртывание…',
+        deployPulling: 'Загружаем образы контейнеров…',
         deployStarting: 'Запускаем сервисы…',
         deployWaiting: 'Ждём запуск приложения…',
         nginxWorking: 'Настраиваем Nginx и HTTPS…',
         nginxInstalling: 'Устанавливаем Nginx и Certbot…',
-        nginxConfiguring: 'Пишем конфиг Nginx…',
+        nginxConfiguring: 'Пишем конфигурацию Nginx…',
         nginxCertbot: 'Получаем HTTPS-сертификат…',
-        nginxRenewTest: 'Проверяем продление сертификата (dry-run)…',
+        nginxRenewTest: 'Проверяем автопродление сертификата (dry-run)…',
         nginxVerifying: 'Проверяем HTTPS…',
         adminUsername: 'Имя пользователя',
         adminEmail: 'Email',
@@ -666,13 +675,13 @@
         adminPasswordGenerate: 'Сгенерировать',
         adminPasswordMismatch: 'Пароли не совпадают.',
         adminPasswordRequired: 'Введи пароль и подтверждение.',
-        finishCompleteTitle: 'Всё запущено и работает!',
+        finishCompleteTitle: 'Всё работает!',
         finishAllRunning: 'Все сервисы запущены, проверки пройдены. Сервер готов к работе.',
-        finishSomeIssues: 'Есть проблемы — смотри статус ниже.',
-        finishServices: 'Docker-сервисы',
-        finishHealth: 'Проверки',
+        finishSomeIssues: 'Есть замечания — смотри статус ниже.',
+        finishServices: 'Сервисы Docker',
+        finishHealth: 'Проверки работоспособности',
         finishAdmin: 'Django Admin',
-        finishOpenAdmin: 'Открыть Admin panel',
+        finishOpenAdmin: 'Открыть панель администратора',
         finishUsername: 'Имя пользователя',
         finishPaths: 'Пути',
         finishCommands: 'Полезные команды',
@@ -680,11 +689,11 @@
         finishChecking: 'Проверяем сервисы…',
         externalDb: 'Внешняя PostgreSQL',
         externalRedis: 'Внешний Redis',
-        strongPassword: 'Сильный пароль',
+        strongPassword: 'Надёжный пароль',
         domainLabel: 'Домен сервера',
         certbotEmail: 'Email для Let\'s Encrypt (необязательно)',
-        certbotEmailHelp: 'Let\'s Encrypt использует этот адрес для предупреждений об истечении сертификата и важных уведомлений CA, если автопродление сломается. Можно оставить пустым — Certbot зарегистрируется без email.',
-        certbotEmailPrivacy: 'Email передаётся только в Let\'s Encrypt (Certbot). RMBL Chat не сохраняет его в базе приложения и не пишет в .env.',
+        certbotEmailHelp: 'Let\'s Encrypt использует этот адрес для предупреждений об истечении сертификата и важных уведомлений, если автопродление перестанет работать. Можно оставить пустым — Certbot зарегистрируется без email.',
+        certbotEmailPrivacy: 'Email передаётся только в Let\'s Encrypt (Certbot). RMBL Chat не сохраняет его в базе приложения и не записывает в .env.',
         certbotEmailPh: 'you@example.com — необязательно',
         checkDns: 'Проверить DNS-записи',
       },
@@ -705,17 +714,17 @@
         finish: { title: 'Installation complete', desc: 'Summary and next steps', pending: 'Review the installation summary.', mascot: 'We did it! Below is a health check of every service. When you are satisfied, finish to close the installer — your server keeps running.' },
       },
       ru: {
-        system: { title: 'Требования к системе', desc: 'Ubuntu/Debian, root, Python 3', pending: 'Проверим ОС, права root и наличие Python 3.', mascot: 'Сначала проверю, что машина готова: Ubuntu или Debian, root и Python 3. Без этого дальше ставить бессмысленно.' },
-        ufw: { title: 'Firewall (UFW)', desc: 'Порты 22, 80, 443', pending: 'Настроим firewall: откроем SSH, HTTP и HTTPS.', mascot: 'Закрываю все двери, кроме нужных: SSH, HTTP и HTTPS. Файрвол — первая линия обороны, поэтому настраиваем его до установки всего остального.' },
-        docker: { title: 'Docker', desc: 'Engine и Compose plugin', pending: 'Установим Docker Engine и Compose plugin.', mascot: 'RMBL работает в Docker-контейнерах — база, кэш и приложение изолированы и обновляются одной командой, без конфликтов с системой.' },
-        ghcr: { title: 'Реестр образов (GHCR)', desc: 'Ключ от мейнтейнера', pending: 'Войдём в GHCR с ключом доступа от мейнтейнера.', mascot: 'Образы приложения лежат в приватном реестре GHCR. Вставь ключ от мейнтейнера — я залогиню Docker, чтобы скачать образ сервера.' },
-        env: { title: 'Конфигурация сервера (.env)', desc: 'Домен, DNS, БД, Redis', pending: 'Укажи домен, настрой DNS (ниже), сохрани конфигурацию.', mascot: 'Здесь рождается конфигурация: домен, ключи, пароли. Секреты сгенерирую сам — тебе нужно только указать домен и проверить DNS.' },
-        awscli: { title: 'AWS CLI', desc: 'Утилита для настройки S3', pending: 'Установим AWS CLI — нужен для автоматического создания bucket и IAM-пользователя.', mascot: 'AWS CLI позволяет автоматически создать S3 bucket и IAM-пользователя. Одна установка сейчас — меньше ручной работы в консоли AWS потом.' },
-        aws: { title: 'AWS S3 — хранение файлов', desc: 'Bucket, IAM, загрузки', pending: 'Настрой S3 — bucket и IAM-пользователь, или автоматическая настройка.', mascot: 'Загруженные файлы хранятся в приватном S3 bucket. Можно настроить автоматически с bootstrap-ключами или ввести credentials вручную — в любом случае проверю доступ.' },
-        deploy: { title: 'Деплой приложения', desc: 'Образ и запуск сервисов', pending: 'Скачаем образ и запустим контейнеры приложения.', mascot: 'Самое интересное: скачиваю образ и запускаю контейнеры — базу, Redis, веб и воркеры. Займёт пару минут.' },
-        superuser: { title: 'Аккаунт Django Admin', desc: 'Первый суперпользователь', pending: 'Создадим первого суперпользователя Django Admin.', mascot: 'Создаём админа Django — это внутренняя админка сервера, не аккаунт мессенджера. Придумай надёжный пароль и сохрани его.' },
-        nginx: { title: 'Nginx и HTTPS', desc: 'Reverse proxy и Let\'s Encrypt', pending: 'Настроим Nginx, получим HTTPS-сертификат и привяжем домен.', mascot: 'Ставлю nginx и получаю HTTPS-сертификат от Let\'s Encrypt. Без него браузеры и приложения не будут доверять твоему серверу.' },
-        finish: { title: 'Установка завершена', desc: 'Сводка и дальнейшие шаги', pending: 'Ознакомься со сводкой по установке.', mascot: 'Готово! Ниже — проверка всех сервисов. Когда всё ок, заверши установку — сервер продолжит работать без мастера.' },
+        system: { title: 'Требования к системе', desc: 'Ubuntu/Debian, root, Python 3', pending: 'Проверяем ОС, права root и наличие Python 3.', mascot: 'Сначала убеждаюсь, что сервер готов: Ubuntu или Debian, доступ root и Python 3. Без этого дальше ставить не имеет смысла.' },
+        ufw: { title: 'Файрвол (UFW)', desc: 'Порты 22, 80, 443', pending: 'Настраиваем файрвол: открываем SSH, HTTP и HTTPS.', mascot: 'Закрываю всё лишнее и оставляю только нужные порты: SSH, HTTP и HTTPS. Файрвол настраиваем до установки сервисов, которые слушают сеть.' },
+        docker: { title: 'Docker', desc: 'Docker Engine и плагин Compose', pending: 'Устанавливаем Docker Engine и плагин Compose.', mascot: 'RMBL работает в контейнерах — база, кэш и приложение изолированы и обновляются одной командой, не засоряя систему.' },
+        ghcr: { title: 'Реестр образов (GHCR)', desc: 'Ключ доступа от команды RMBL', pending: 'Входим в GHCR с ключом доступа от команды RMBL.', mascot: 'Образы приложения лежат в закрытом реестре GHCR. Вставь ключ от команды RMBL — я авторизую Docker, чтобы скачать образ сервера.' },
+        env: { title: 'Конфигурация сервера (.env)', desc: 'Домен, DNS, база, Redis', pending: 'Укажи домен, настрой DNS (ниже) и сохрани конфигурацию.', mascot: 'Здесь задаём конфигурацию: домен, секреты, пароли. Секреты сгенерирую сам — тебе нужно указать домен и проверить DNS.' },
+        awscli: { title: 'AWS CLI', desc: 'Утилита для настройки S3', pending: 'Устанавливаем AWS CLI — нужен для автоматического создания бакета и IAM-пользователя.', mascot: 'AWS CLI позволяет автоматически создать S3-бакет и IAM-пользователя. Один раз поставим сейчас — потом меньше кликов в консоли AWS.' },
+        aws: { title: 'Хранилище AWS S3', desc: 'Бакет, IAM, загрузка файлов', pending: 'Настрой S3 для хранения файлов — создай бакет и IAM-пользователя или воспользуйся автоматической настройкой.', mascot: 'Загруженные файлы хранятся в закрытом S3-бакете. Можно настроить автоматически с bootstrap-ключами или ввести ключи приложения вручную — в любом случае проверю доступ.' },
+        deploy: { title: 'Развёртывание приложения', desc: 'Образы и запуск сервисов', pending: 'Скачиваем образ и запускаем контейнеры.', mascot: 'Самое интересное: скачиваю образ и поднимаю контейнеры — базу, Redis, веб-сервер и фоновые воркеры. Это займёт пару минут.' },
+        superuser: { title: 'Учётная запись Django Admin', desc: 'Первый суперпользователь', pending: 'Создаём первого суперпользователя Django Admin.', mascot: 'Создаём суперпользователя Django Admin — это внутренняя панель сервера, не аккаунт в мессенджере. Задай надёжный пароль и сохрани его.' },
+        nginx: { title: 'Nginx и HTTPS', desc: 'Обратный прокси и Let\'s Encrypt', pending: 'Настраиваем Nginx, получаем HTTPS-сертификат и привязываем домен.', mascot: 'Ставлю Nginx и получаю бесплатный HTTPS-сертификат от Let\'s Encrypt. Без HTTPS браузеры и клиенты не будут доверять серверу.' },
+        finish: { title: 'Установка завершена', desc: 'Итоги и следующие шаги', pending: 'Просмотри сводку по установке.', mascot: 'Готово! Ниже — проверка всех сервисов. Когда всё устроит, заверши установку — сервер продолжит работать, а мастер закроется.' },
       },
     };
 
@@ -745,6 +754,7 @@
     function renderMascotTip(stepId) {
       const el = document.getElementById('mascot-tip');
       if (!el) return;
+      if (stepId === 'finish') { el.classList.add('hidden'); return; }
       const meta = stepMeta(stepId);
       if (!meta.mascot) { el.classList.add('hidden'); return; }
       el.classList.remove('hidden');
@@ -1456,6 +1466,10 @@
       if (state) { renderStepList(); if (!document.getElementById('screen-wizard').classList.contains('hidden')) renderCurrentStep(); }
     }
 
+    window.addEventListener('storage', e => {
+      if (e.key === 'installer_lang' && e.newValue && e.newValue !== lang) setLang(e.newValue);
+    });
+
     document.getElementById('lang-en').onclick = () => setLang('en');
     document.getElementById('lang-ru').onclick = () => setLang('ru');
     document.getElementById('start-lang-en').onclick = () => setLang('en');
@@ -1544,6 +1558,7 @@
       }
       document.getElementById('step-title').textContent = meta.title;
       document.getElementById('step-desc').textContent = meta.desc;
+      document.getElementById('step-panel').classList.toggle('finish-step', step.id === 'finish');
       const statusEl = document.getElementById('step-status');
       statusEl.classList.remove('hidden', 'ok', 'fail', 'info');
       const recentFail = lastActionResult
@@ -1552,8 +1567,7 @@
         && Date.now() - lastActionResult.time < 120000;
       if (step.status === 'done') {
         if (step.id === 'finish') {
-          statusEl.textContent = step.message || t('finishCompleteTitle');
-          statusEl.classList.add(step.data?.all_ok === false ? 'fail' : 'ok');
+          statusEl.classList.add('hidden');
         } else {
           statusEl.textContent = step.message || t('hint');
           statusEl.classList.add('ok');
@@ -1794,6 +1808,7 @@
       const u = new URL('/aws-guide.html', location.origin);
       if (TOKEN) u.searchParams.set('token', TOKEN);
       if (bucket) u.searchParams.set('bucket', bucket);
+      u.searchParams.set('lang', lang);
       window.open(u.toString(), '_blank');
     }
 
