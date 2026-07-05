@@ -3,50 +3,83 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rumble Server — Installer</title>
+  <title>RMBL — Server Installer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #0f1419; --surface: #1a2332; --surface2: #243044; --border: #2d3a4f;
-      --text: #e7ecf3; --muted: #8b9cb3; --accent: #3b82f6; --accent-hover: #2563eb;
-      --ok: #22c55e; --err: #ef4444; --radius: 10px;
+      --purple: #6E5BE9; --purple-light: #8B7CF0; --purple-dark: #5544CC;
+      --navy: #1A1A2E; --navy-mid: #252542; --mint: #A8E6CF; --mint-dark: #2D4A3E;
+      --white: #FFFFFF; --off-white: #F6F5F2;
+      --gray-100: #F0EFEC; --gray-200: #E2E0DB; --gray-400: #9B978F; --gray-600: #6B6760; --gray-800: #2E2C28;
+      --bg: var(--off-white); --surface: var(--white); --surface2: var(--gray-100);
+      --border: var(--gray-200); --text: var(--gray-800); --muted: var(--gray-600);
+      --accent: var(--purple); --accent-hover: var(--purple-light);
+      --ok: #2d6a4f; --ok-bg: rgba(168,230,207,.35); --err: #c0392b; --err-bg: rgba(192,57,43,.1);
+      --radius: 14px; --font-heading: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
     }
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-    header { padding: 20px 24px; border-bottom: 1px solid var(--border); background: var(--surface); display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
-    header h1 { margin: 0 0 4px; font-size: 1.35rem; }
-    header p { margin: 0; color: var(--muted); font-size: 0.9rem; }
-    .lang-switch { display: flex; gap: 4px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 3px; }
-    .lang-switch button { border: none; background: transparent; color: var(--muted); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 600; }
-    .lang-switch button.active { background: var(--accent); color: #fff; }
-    .layout { display: grid; grid-template-columns: 280px 1fr; min-height: calc(100vh - 76px); }
+    body { margin: 0; font-family: var(--font-body); background: var(--bg); color: var(--text); min-height: 100vh; }
+    h1, h2, h3, h4 { font-family: var(--font-heading); }
+    header {
+      padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--surface);
+      display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
+    }
+    .header-brand { display: flex; align-items: center; gap: 12px; }
+    .header-brand img { height: 32px; width: auto; }
+    header h1 { margin: 0; font-size: 1.15rem; font-weight: 700; color: var(--navy); }
+    header p { margin: 2px 0 0; color: var(--muted); font-size: 0.85rem; }
+    .header-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .lang-switch { display: flex; gap: 4px; background: var(--gray-100); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
+    .lang-switch button { border: none; background: transparent; color: var(--muted); padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: 600; font-family: var(--font-heading); }
+    .lang-switch button.active { background: var(--purple); color: #fff; }
+    .mode-badge {
+      font-size: 0.78rem; font-weight: 600; padding: 6px 12px; border-radius: 100px;
+      background: rgba(110,91,233,.1); color: var(--purple); border: 1px solid rgba(110,91,233,.2);
+      font-family: var(--font-heading); cursor: pointer;
+    }
+    .mode-badge.paused { background: rgba(192,57,43,.08); color: var(--err); border-color: rgba(192,57,43,.2); }
+    .layout { display: grid; grid-template-columns: 300px 1fr; min-height: calc(100vh - 65px); }
     @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } .sidebar { border-right: none; border-bottom: 1px solid var(--border); } }
-    .sidebar { padding: 16px; border-right: 1px solid var(--border); background: var(--surface); }
-    .step-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: var(--radius); margin-bottom: 6px; cursor: pointer; border: 1px solid transparent; }
-    .step-item:hover { background: var(--surface2); }
-    .step-item.active { background: var(--surface2); border-color: var(--accent); }
-    .step-dot { width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; background: var(--border); color: var(--muted); }
-    .step-item.done .step-dot { background: var(--ok); color: #052e16; }
+    .sidebar { padding: 16px; border-right: 1px solid var(--border); background: var(--navy); }
+    .sidebar-title { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(255,255,255,.45); margin: 0 0 12px 4px; font-weight: 600; }
+    .step-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 12px; margin-bottom: 4px; cursor: pointer; border: 1px solid transparent; transition: background .2s; }
+    .step-item:hover { background: var(--navy-mid); }
+    .step-item.active { background: var(--navy-mid); border-color: rgba(110,91,233,.5); }
+    .step-dot { width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; background: rgba(255,255,255,.1); color: rgba(255,255,255,.5); font-family: var(--font-heading); }
+    .step-item.done .step-dot { background: var(--mint); color: var(--mint-dark); }
     .step-item.error .step-dot { background: var(--err); color: #fff; }
-    .step-item.active .step-dot { background: var(--accent); color: #fff; }
-    .step-title { font-size: 0.92rem; font-weight: 600; }
-    .step-desc { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+    .step-item.active .step-dot { background: var(--purple); color: #fff; }
+    .step-title { font-size: 0.88rem; font-weight: 600; color: rgba(255,255,255,.9); font-family: var(--font-heading); }
+    .step-desc { font-size: 0.75rem; color: rgba(255,255,255,.45); margin-top: 2px; }
     main { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
-    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
-    .panel h2 { margin: 0 0 8px; font-size: 1.15rem; }
-    .panel p.desc { margin: 0 0 16px; color: var(--muted); font-size: 0.9rem; }
-    .status { padding: 12px 14px; border-radius: 8px; margin-bottom: 16px; font-size: 0.9rem; line-height: 1.45; }
-    .status.ok { background: rgba(34,197,94,.12); border: 1px solid rgba(34,197,94,.35); }
-    .status.fail { background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.35); }
-    .status.info { background: rgba(59,130,246,.12); border: 1px solid rgba(59,130,246,.35); }
-    .manual { background: #111827; border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; white-space: pre-wrap; margin-bottom: 16px; color: #cbd5e1; }
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 24px; box-shadow: 0 4px 24px rgba(0,0,0,.04); }
+    .panel h2 { margin: 0 0 8px; font-size: 1.25rem; color: var(--navy); }
+    .panel p.desc { margin: 0 0 16px; color: var(--muted); font-size: 0.92rem; line-height: 1.5; }
+    .mascot-tip {
+      display: flex; gap: 16px; align-items: flex-start; margin-bottom: 20px;
+      padding: 16px 18px; background: var(--gray-100); border: 1px solid var(--border); border-radius: 16px;
+    }
+    .mascot-tip img { width: 72px; height: 72px; flex-shrink: 0; object-fit: contain; }
+    .mascot-tip p { margin: 0; font-size: 0.9rem; line-height: 1.55; color: var(--gray-600); }
+    .mascot-tip p strong { color: var(--navy); font-family: var(--font-heading); display: block; margin-bottom: 4px; font-size: 0.82rem; }
+    .status { padding: 12px 16px; border-radius: 12px; margin-bottom: 16px; font-size: 0.9rem; line-height: 1.45; }
+    .status.ok { background: var(--ok-bg); border: 1px solid rgba(45,106,79,.25); color: var(--ok); }
+    .status.fail { background: var(--err-bg); border: 1px solid rgba(192,57,43,.25); color: var(--err); }
+    .status.info { background: rgba(110,91,233,.08); border: 1px solid rgba(110,91,233,.2); color: var(--purple-dark); }
+    .done-badge { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 100px; background: var(--ok-bg); color: var(--ok); font-weight: 600; font-size: 0.88rem; margin-bottom: 12px; font-family: var(--font-heading); }
+    .manual { background: var(--navy); border: 1px solid var(--navy-mid); border-radius: 12px; padding: 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; white-space: pre-wrap; margin-bottom: 16px; color: rgba(255,255,255,.75); }
     .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
     .form-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0 20px; }
-    button.btn { border: none; border-radius: 8px; padding: 10px 16px; font-size: 0.9rem; font-weight: 600; cursor: pointer; }
-    button.primary { background: var(--accent); color: #fff; }
-    button.primary:hover { background: var(--accent-hover); }
-    button.secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
-    button.secondary:hover { background: var(--border); }
-    button.btn:disabled { opacity: .55; cursor: not-allowed; }
+    button.btn { border: none; border-radius: var(--radius); padding: 12px 20px; font-size: 0.9rem; font-weight: 600; cursor: pointer; font-family: var(--font-heading); transition: background .2s, transform .15s, box-shadow .2s; }
+    button.primary { background: var(--purple); color: #fff; box-shadow: 0 4px 16px rgba(110,91,233,.25); }
+    button.primary:hover:not(:disabled) { background: var(--purple-light); transform: translateY(-1px); }
+    button.secondary { background: var(--surface); color: var(--navy); border: 1px solid var(--border); }
+    button.secondary:hover:not(:disabled) { background: var(--gray-100); }
+    button.btn:disabled { opacity: .5; cursor: not-allowed; transform: none !important; }
     .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-bottom: 16px; }
     .form-stack {
       display: flex;
@@ -65,24 +98,24 @@
     .password-actions { display: flex; gap: 6px; flex-shrink: 0; }
     button.btn.compact { padding: 10px 12px; font-size: 0.82rem; white-space: nowrap; }
     .field-hint { font-size: 0.78rem; color: var(--muted); line-height: 1.4; margin-top: -4px; }
-    input { background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 10px 12px; font-size: 0.9rem; }
-    input:focus { outline: 2px solid rgba(59,130,246,.45); border-color: var(--accent); }
+    input { background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 10px; padding: 10px 12px; font-size: 0.9rem; font-family: var(--font-body); }
+    input:focus { outline: 2px solid rgba(110,91,233,.35); border-color: var(--purple); }
     .checkbox-row { display: flex; align-items: center; gap: 8px; margin: 8px 0 12px; color: var(--text); font-size: 0.9rem; }
     .checkbox-row input { width: auto; }
-    .log { flex: 1; background: #0b0f14; border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; overflow: auto; white-space: pre-wrap; color: #94a3b8; max-height: 320px; }
+    .log { flex: 1; background: var(--navy); border: 1px solid var(--navy-mid); border-radius: 12px; padding: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; overflow: auto; white-space: pre-wrap; color: rgba(255,255,255,.55); max-height: 280px; }
     .hidden { display: none !important; }
     .mode-switch { display: flex; gap: 8px; margin-bottom: 0; flex-wrap: wrap; }
-    .mode-switch label { flex-direction: row; align-items: center; gap: 8px; cursor: pointer; color: var(--text); font-size: 0.9rem; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
-    .mode-switch label:has(input:checked) { border-color: var(--accent); background: rgba(59,130,246,.1); }
+    .mode-switch label { flex-direction: row; align-items: center; gap: 8px; cursor: pointer; color: var(--text); font-size: 0.9rem; padding: 8px 12px; background: var(--gray-100); border: 1px solid var(--border); border-radius: 10px; }
+    .mode-switch label:has(input:checked) { border-color: var(--purple); background: rgba(110,91,233,.08); }
     .mode-switch input { width: auto; }
     .env-form { display: flex; flex-direction: column; gap: 14px; }
-    .env-section { background: rgba(36, 48, 68, 0.35); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
-    .env-section-title { margin: 0 0 6px; font-size: 0.98rem; font-weight: 600; color: var(--text); }
+    .env-section { background: var(--gray-100); border: 1px solid var(--border); border-radius: 16px; padding: 16px 18px; }
+    .env-section-title { margin: 0 0 6px; font-size: 0.98rem; font-weight: 600; color: var(--navy); font-family: var(--font-heading); }
     .env-section-lead { margin: 0 0 14px; color: var(--muted); font-size: 0.85rem; line-height: 1.5; }
-    .env-inner { margin-top: 12px; padding: 12px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
-    .env-inner-title { margin: 0 0 8px; font-size: 0.88rem; font-weight: 600; color: var(--text); }
-    select { background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 10px 12px; font-size: 0.9rem; }
-    select:focus { outline: 2px solid rgba(59,130,246,.45); border-color: var(--accent); }
+    .env-inner { margin-top: 12px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+    .env-inner-title { margin: 0 0 8px; font-size: 0.88rem; font-weight: 600; color: var(--navy); }
+    select { background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 10px; padding: 10px 12px; font-size: 0.9rem; font-family: var(--font-body); }
+    select:focus { outline: 2px solid rgba(110,91,233,.35); border-color: var(--purple); }
     .status-list { margin: 12px 0 16px; }
     .status-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 0.9rem; }
     .status-item.ok { color: var(--ok); }
@@ -128,110 +161,180 @@
       color: var(--muted);
       line-height: 1.35;
     }
-    .verify-step.active { color: var(--accent); }
+    .verify-step.active { color: var(--purple); }
     .verify-step.done { color: var(--ok); }
     .verify-step.fail { color: var(--err); }
     .verify-step .mark { width: 16px; flex-shrink: 0; text-align: center; }
     .env-form.aws-form-root { position: relative; }
     .aws-busy-overlay {
-      position: absolute;
-      inset: 0;
-      z-index: 20;
-      display: flex;
-      align-items: flex-start;
-      justify-content: center;
-      padding-top: 48px;
-      background: rgba(15, 20, 25, 0.55);
-      border-radius: var(--radius);
-      color: var(--text);
-      font-size: 0.92rem;
-      font-weight: 600;
-      cursor: wait;
+      position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column;
+      align-items: center; justify-content: flex-start; padding-top: 48px; gap: 12px;
+      background: rgba(246,245,242,.85); border-radius: 16px; color: var(--navy);
+      font-size: 0.92rem; font-weight: 600; cursor: wait;
     }
+    .aws-busy-overlay img { width: 80px; height: 80px; }
     .panel.aws-step-locked .actions button { pointer-events: none; opacity: 0.55; }
     #step-panel { position: relative; }
     .step-busy-overlay {
-      position: absolute;
-      inset: 0;
-      z-index: 15;
-      display: flex;
-      align-items: flex-start;
-      justify-content: center;
-      padding-top: 56px;
-      background: rgba(15, 20, 25, 0.55);
-      border-radius: var(--radius);
-      color: var(--text);
-      font-size: 0.92rem;
-      font-weight: 600;
-      cursor: wait;
+      position: absolute; inset: 0; z-index: 15; display: flex; flex-direction: column;
+      align-items: center; justify-content: flex-start; padding-top: 56px; gap: 12px;
+      background: rgba(246,245,242,.88); border-radius: 20px; color: var(--navy);
+      font-size: 0.92rem; font-weight: 600; cursor: wait;
     }
+    .step-busy-overlay img { width: 96px; height: 96px; animation: mascotFloat 6s ease-in-out infinite; }
     .panel.step-busy .actions button { pointer-events: none; opacity: 0.55; }
     .finish-panel { display: flex; flex-direction: column; gap: 16px; }
     .finish-loading { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 0.9rem; padding: 8px 0; }
     .finish-hero {
-      padding: 18px 20px;
-      border-radius: var(--radius);
-      border: 1px solid rgba(34,197,94,.35);
-      background: rgba(34,197,94,.1);
+      display: flex; gap: 20px; align-items: center; padding: 24px;
+      border-radius: 20px; border: 1px solid rgba(168,230,207,.5); background: var(--ok-bg);
     }
-    .finish-hero.warn {
-      border-color: rgba(245,158,11,.45);
-      background: rgba(245,158,11,.1);
-    }
-    .finish-hero h3 { margin: 0 0 6px; font-size: 1.05rem; display: flex; align-items: center; gap: 8px; }
-    .finish-hero p { margin: 0; color: var(--muted); font-size: 0.88rem; line-height: 1.45; }
+    .finish-hero.warn { border-color: rgba(245,158,11,.45); background: rgba(245,158,11,.1); }
+    .finish-hero img { width: 100px; height: 100px; flex-shrink: 0; }
+    .finish-hero-text h3 { margin: 0 0 6px; font-size: 1.35rem; color: var(--navy); display: flex; align-items: center; gap: 8px; }
+    .finish-hero-text p { margin: 0; color: var(--muted); font-size: 0.92rem; line-height: 1.5; }
     .finish-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
     .finish-card {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 14px 16px;
+      background: var(--gray-100); border: 1px solid var(--border); border-radius: 16px; padding: 16px 18px;
     }
-    .finish-card h4 { margin: 0 0 10px; font-size: 0.92rem; font-weight: 600; }
+    .finish-card h4 { margin: 0 0 10px; font-size: 0.92rem; font-weight: 600; color: var(--navy); font-family: var(--font-heading); }
     .finish-admin-link {
-      display: inline-block;
-      margin-top: 10px;
-      padding: 10px 16px;
-      background: var(--accent);
-      color: #fff;
-      border-radius: 8px;
-      text-decoration: none;
-      font-weight: 600;
-      font-size: 0.9rem;
+      display: inline-block; margin-top: 10px; padding: 12px 20px; background: var(--purple); color: #fff;
+      border-radius: var(--radius); text-decoration: none; font-weight: 600; font-size: 0.9rem; font-family: var(--font-heading);
+      box-shadow: 0 4px 16px rgba(110,91,233,.25);
     }
-    .finish-admin-link:hover { background: var(--accent-hover); }
+    .finish-admin-link:hover { background: var(--purple-light); }
     .finish-meta { font-size: 0.85rem; color: var(--muted); line-height: 1.65; }
-    .finish-meta code { color: var(--text); font-size: 0.82rem; word-break: break-all; }
+    .finish-meta code { color: var(--navy); font-size: 0.82rem; word-break: break-all; }
     .finish-commands {
-      margin: 0;
-      padding: 12px;
-      background: #111827;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 0.78rem;
-      white-space: pre-wrap;
-      color: #cbd5e1;
-      line-height: 1.5;
+      margin: 0; padding: 12px; background: var(--navy); border-radius: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem;
+      white-space: pre-wrap; color: rgba(255,255,255,.7); line-height: 1.5;
     }
+    /* Start screen */
+    #screen-start { min-height: 100vh; background: var(--navy); position: relative; overflow: hidden; }
+    #screen-wizard { min-height: 100vh; }
+    #screen-shutdown { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--off-white); padding: 24px; }
+    .shutdown-card { text-align: center; max-width: 480px; padding: 40px; background: var(--surface); border-radius: 24px; border: 1px solid var(--border); box-shadow: 0 12px 40px rgba(0,0,0,.06); }
+    .shutdown-card img { width: 120px; height: 120px; margin-bottom: 20px; }
+    .shutdown-card h2 { margin: 0 0 8px; color: var(--navy); font-size: 1.5rem; }
+    .shutdown-card p { margin: 0; color: var(--muted); line-height: 1.5; }
+    .hero { position: relative; min-height: 55vh; display: flex; align-items: center; padding: 80px 0 40px; overflow: hidden; }
+    .hero-bg-shapes { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+    .hero-shape { position: absolute; border-radius: 50%; opacity: 0.08; filter: blur(100px); }
+    .hero-shape-1 { width: 600px; height: 600px; background: var(--purple); top: -200px; right: -100px; }
+    .hero-shape-2 { width: 400px; height: 400px; background: var(--mint); bottom: -100px; left: -100px; }
+    .hero-shape-3 { width: 300px; height: 300px; background: var(--purple-light); top: 50%; left: 40%; }
+    .hero-content { max-width: 1100px; margin: 0 auto; padding: 0 32px; display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 48px; position: relative; z-index: 1; width: 100%; }
+    .hero-headline { font-family: var(--font-heading); font-size: clamp(36px, 5vw, 56px); font-weight: 700; color: white; letter-spacing: -0.03em; line-height: 1.08; margin: 0; white-space: pre-line; }
+    .hero-sub { font-size: clamp(15px, 2vw, 18px); color: rgba(255,255,255,.65); line-height: 1.6; max-width: 460px; margin: 16px 0 0; }
+    .hero-mascot { position: relative; display: flex; justify-content: center; }
+    .hero-mascot-glow { position: absolute; width: 70%; height: 70%; border-radius: 50%; background: radial-gradient(circle, rgba(110,91,233,.25), transparent 70%); filter: blur(40px); }
+    .hero-mascot-figure { position: relative; max-width: 380px; margin: 0; animation: mascotFloat 6s ease-in-out infinite; }
+    .hero-mascot-img { width: 100%; height: auto; display: block; }
+    .hero-mascot-bubble { position: absolute; left: 63%; top: 18%; transform: translate(-50%,-50%) rotate(-21deg); font-weight: 600; color: var(--navy); white-space: nowrap; font-family: var(--font-heading); font-size: 0.95rem; }
+    @keyframes mascotFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
+    .start-modes { max-width: 900px; margin: 0 auto; padding: 0 32px 64px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; position: relative; z-index: 1; }
+    @media (max-width: 768px) { .hero-content { grid-template-columns: 1fr; text-align: center; } .hero-mascot { order: -1; } .hero-mascot-figure { max-width: 240px; } .start-modes { grid-template-columns: 1fr; } }
+    .mode-card { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); border-radius: 20px; padding: 28px; display: flex; flex-direction: column; gap: 12px; }
+    .mode-card.recommended { border-color: rgba(110,91,233,.5); background: rgba(110,91,233,.12); }
+    .mode-card h3 { margin: 0; color: white; font-size: 1.15rem; font-family: var(--font-heading); }
+    .mode-card p { margin: 0; color: rgba(255,255,255,.6); font-size: 0.9rem; line-height: 1.5; flex: 1; }
+    .mode-card .tag { display: inline-block; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--mint); margin-bottom: 4px; }
+    .btn-shimmer {
+      position: relative; overflow: hidden; isolation: isolate;
+      background: linear-gradient(120deg, var(--purple-dark), var(--purple) 40%, var(--purple-light) 60%, var(--purple));
+      background-size: 200% 100%; animation: btnShimmerBg 3.5s ease infinite;
+    }
+    @keyframes btnShimmerBg { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+    .btn-secondary-light {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 28px;
+      background: rgba(255,255,255,.08); color: white; border: 1px solid rgba(255,255,255,.15); border-radius: 14px;
+      font-family: var(--font-heading); font-size: 16px; font-weight: 600; cursor: pointer; transition: background .2s, transform .15s;
+    }
+    .btn-secondary-light:hover { background: rgba(255,255,255,.14); transform: translateY(-2px); }
+    .start-resume { text-align: center; padding: 0 32px 48px; position: relative; z-index: 1; }
+    .start-resume button { background: transparent; border: 1px solid rgba(255,255,255,.25); color: rgba(255,255,255,.7); padding: 10px 20px; border-radius: 10px; cursor: pointer; font-family: var(--font-heading); font-size: 0.9rem; }
+    .start-resume button:hover { background: rgba(255,255,255,.08); color: white; }
+    .start-lang { position: absolute; top: 20px; right: 24px; z-index: 10; }
+    .start-lang .lang-switch { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.15); }
+    .start-lang .lang-switch button { color: rgba(255,255,255,.6); }
+    .start-lang .lang-switch button.active { background: var(--purple); color: #fff; }
   </style>
 </head>
 <body>
-  <header>
-    <div>
-      <h1 id="hdr-title">Rumble Server — Installer</h1>
-      <p id="install-dir">Loading...</p>
+  <div id="screen-start" class="hidden">
+    <div class="start-lang">
+      <div class="lang-switch">
+        <button type="button" id="start-lang-en" class="active">EN</button>
+        <button type="button" id="start-lang-ru">RU</button>
+      </div>
     </div>
-    <div class="lang-switch">
-      <button type="button" id="lang-en" class="active">EN</button>
-      <button type="button" id="lang-ru">RU</button>
+    <section class="hero">
+      <div class="hero-bg-shapes">
+        <div class="hero-shape hero-shape-1"></div>
+        <div class="hero-shape hero-shape-2"></div>
+        <div class="hero-shape hero-shape-3"></div>
+      </div>
+      <div class="hero-content">
+        <div class="hero-text">
+          <h1 class="hero-headline" id="start-headline"></h1>
+          <p class="hero-sub" id="start-sub"></p>
+        </div>
+        <div class="hero-mascot">
+          <div class="hero-mascot-glow"></div>
+          <figure class="hero-mascot-figure">
+            <img src="/assets/mascot-3-chat-dark.svg" alt="" class="hero-mascot-img">
+            <span class="hero-mascot-bubble" id="start-bubble">Let's rumble!</span>
+          </figure>
+        </div>
+      </div>
+    </section>
+    <div class="start-modes">
+      <div class="mode-card recommended">
+        <span class="tag" id="start-auto-tag"></span>
+        <h3 id="start-auto-title"></h3>
+        <p id="start-auto-desc"></p>
+        <button type="button" class="btn-primary btn-shimmer" id="start-auto-btn"></button>
+      </div>
+      <div class="mode-card">
+        <h3 id="start-manual-title"></h3>
+        <p id="start-manual-desc"></p>
+        <button type="button" class="btn-secondary-light" id="start-manual-btn"></button>
+      </div>
+    </div>
+    <div class="start-resume hidden" id="start-resume-wrap">
+      <button type="button" id="start-resume-btn"></button>
+    </div>
+  </div>
+
+  <div id="screen-wizard" class="hidden">
+  <header>
+    <div class="header-brand">
+      <img src="/assets/logo.svg" alt="RMBL">
+      <div>
+        <h1 id="hdr-title">RMBL — Installer</h1>
+        <p id="install-dir">Loading...</p>
+      </div>
+    </div>
+    <div class="header-controls">
+      <span class="mode-badge hidden" id="mode-badge" title=""></span>
+      <div class="lang-switch">
+        <button type="button" id="lang-en" class="active">EN</button>
+        <button type="button" id="lang-ru">RU</button>
+      </div>
     </div>
   </header>
 
   <div class="layout">
-    <aside class="sidebar"><div id="step-list"></div></aside>
+    <aside class="sidebar">
+      <p class="sidebar-title" id="sidebar-title">Steps</p>
+      <div id="step-list"></div>
+    </aside>
     <main>
       <section class="panel" id="step-panel">
+        <div id="mascot-tip" class="mascot-tip hidden"></div>
+        <div id="done-badge" class="done-badge hidden"></div>
         <h2 id="step-title">Loading</h2>
         <p class="desc" id="step-desc"></p>
         <div id="step-busy-overlay" class="step-busy-overlay hidden" aria-live="polite"></div>
@@ -246,24 +349,57 @@
       </section>
     </main>
   </div>
+  </div>
+
+  <div id="screen-shutdown" class="hidden">
+    <div class="shutdown-card">
+      <img src="/assets/mascot-5-action-light.svg" alt="">
+      <h2 id="shutdown-title"></h2>
+      <p id="shutdown-desc"></p>
+    </div>
+  </div>
 
   <script>
     const UI = {
       en: {
-        title: 'Rumble Server — Installer',
+        title: 'RMBL — Server Installer',
         loading: 'Loading...',
         directory: 'Directory',
         log: 'Log',
-        hint: 'Click "Run automatically" or verify when ready.',
-        runAuto: 'Run automatically',
-        verify: "I've done it — verify",
-        skip: 'Skip (I\'ll do it myself)',
+        sidebarSteps: 'Installation steps',
+        hint: 'Click "Run this step" or verify when ready.',
+        runAuto: 'Run this step',
+        verify: "I did it myself — verify",
+        skip: "Skip, I'll handle it later",
         next: 'Next step →',
+        recheck: 'Re-check',
+        viewDetails: 'View details',
+        doneBadge: 'Completed ✓',
+        alreadyDone: 'Already installed — skipping ahead.',
         finish: 'Finish installation',
         finishConfirm: 'Stop the installer? Port 8800 will be closed.',
         shuttingDown: 'Installer is shutting down. You can close this tab.',
+        shutdownTitle: 'Server is running!',
+        shutdownDesc: 'The installer has shut down. Your RMBL server keeps running — you can close this tab.',
         noToken: 'Token required in URL: ?token=...',
         error: 'Error',
+        mascotSays: 'Rumble says',
+        modeAuto: 'Auto mode',
+        modeManual: 'Step-by-step',
+        modePause: 'Pause auto',
+        modeResume: 'Resume auto',
+        startHeadline: "Let's set up\nyour server",
+        startSub: 'This wizard will configure your RMBL Chat server in about 10 minutes. Pick how you want to proceed.',
+        startBubble: "Let's rumble!",
+        startAutoTag: 'Recommended',
+        startAutoTitle: 'Automatic installation',
+        startAutoDesc: 'Steps that need no input run on their own. The wizard pauses only where your credentials or domain are required.',
+        startAutoBtn: 'Start installation',
+        startManualTitle: 'Step-by-step control',
+        startManualDesc: 'You trigger each step yourself. Good if you want to see exactly what happens and when.',
+        startManualBtn: 'Go step by step',
+        startResume: 'Continue installation →',
+        buildingServer: 'Building your server…',
         ghcrKey: 'GHCR key',
         ghcrKeyPh: 'Key from maintainer',
         ghcrUser: 'GHCR user',
@@ -349,8 +485,8 @@
         adminPasswordGenerate: 'Generate',
         adminPasswordMismatch: 'Passwords do not match.',
         adminPasswordRequired: 'Enter and confirm the password.',
-        finishCompleteTitle: 'Installation complete',
-        finishAllRunning: 'All services are running and health checks passed.',
+        finishCompleteTitle: 'Everything is up and running!',
+        finishAllRunning: 'All services are running and health checks passed. Your server is ready.',
         finishSomeIssues: 'Some checks need attention — review the status below.',
         finishServices: 'Docker services',
         finishHealth: 'Health checks',
@@ -363,20 +499,44 @@
         finishChecking: 'Checking services…',
       },
       ru: {
-        title: 'Rumble Server — установщик',
+        title: 'RMBL — установщик сервера',
         loading: 'Загрузка...',
         directory: 'Директория',
         log: 'Лог',
-        hint: 'Нажми «Выполнить автоматически» или проверь, когда будешь готов.',
-        runAuto: 'Выполнить автоматически',
-        verify: 'Я сделал — проверить',
-        skip: 'Пропустить (сделаю сам)',
-        next: 'Следующий шаг →',
+        sidebarSteps: 'Шаги установки',
+        hint: 'Нажми «Выполнить этот шаг» или проверь, когда будешь готов.',
+        runAuto: 'Выполнить этот шаг',
+        verify: 'Я сделал сам — проверить',
+        skip: 'Пропустить, сделаю позже',
+        next: 'К следующему шагу →',
+        recheck: 'Перепроверить',
+        viewDetails: 'Показать детали',
+        doneBadge: 'Выполнено ✓',
+        alreadyDone: 'Уже установлено — пропускаю и иду дальше.',
         finish: 'Завершить установку',
         finishConfirm: 'Завершить установщик? Порт 8800 будет закрыт.',
         shuttingDown: 'Установщик останавливается. Можно закрыть вкладку.',
+        shutdownTitle: 'Сервер работает!',
+        shutdownDesc: 'Установщик выключен. RMBL-сервер продолжает работать — вкладку можно закрыть.',
         noToken: 'Нужен token в URL: ?token=...',
         error: 'Ошибка',
+        mascotSays: 'Rumble говорит',
+        modeAuto: 'Авто-режим',
+        modeManual: 'Пошагово',
+        modePause: 'Пауза',
+        modeResume: 'Продолжить авто',
+        startHeadline: 'Поднимем\nтвой сервер',
+        startSub: 'Мастер настроит RMBL Chat за ~10 минут. Выбери, как проходить установку.',
+        startBubble: "Let's rumble!",
+        startAutoTag: 'Рекомендуется',
+        startAutoTitle: 'Автоматическая установка',
+        startAutoDesc: 'Шаги без ввода запускаются сами. Остановлюсь только там, где нужны ключи, домен или пароль.',
+        startAutoBtn: 'Начать установку',
+        startManualTitle: 'Пошаговый контроль',
+        startManualDesc: 'Каждый шаг запускаешь ты сам. Удобно, если хочешь видеть, что и когда происходит.',
+        startManualBtn: 'Идти по шагам',
+        startResume: 'Продолжить установку →',
+        buildingServer: 'Собираю твой сервер…',
         ghcrKey: 'Ключ GHCR',
         ghcrKeyPh: 'Ключ от мейнтейнера',
         ghcrUser: 'Пользователь GHCR',
@@ -453,8 +613,8 @@
         adminPasswordGenerate: 'Сгенерировать',
         adminPasswordMismatch: 'Пароли не совпадают.',
         adminPasswordRequired: 'Введи пароль и подтверждение.',
-        finishCompleteTitle: 'Установка завершена',
-        finishAllRunning: 'Все сервисы запущены, проверки пройдены.',
+        finishCompleteTitle: 'Всё запущено и работает!',
+        finishAllRunning: 'Все сервисы запущены, проверки пройдены. Сервер готов к работе.',
         finishSomeIssues: 'Есть проблемы — смотри статус ниже.',
         finishServices: 'Docker-сервисы',
         finishHealth: 'Проверки',
@@ -479,39 +639,111 @@
 
     const STEPS_I18N = {
       en: {
-        system: { title: 'System requirements', desc: 'Ubuntu/Debian, root, Python 3', pending: 'We will verify the OS, root access, and Python 3.' },
-        ufw: { title: 'Firewall (UFW)', desc: 'Open ports 22, 80, 443', pending: 'Configure the firewall: allow SSH, HTTP, and HTTPS.' },
-        docker: { title: 'Docker', desc: 'Engine and Compose plugin', pending: 'Install Docker Engine and the Compose plugin.' },
-        ghcr: { title: 'Container registry (GHCR)', desc: 'Access key from maintainer', pending: 'Log in to GHCR with the access key from the maintainer.' },
-        env: { title: 'Server configuration (.env)', desc: 'Domain, DNS, database, Redis', pending: 'Specify the server domain, set up DNS (see below), then save configuration.' },
-        awscli: { title: 'AWS CLI', desc: 'Command-line tool for S3 setup', pending: 'Install AWS CLI — needed to create the S3 bucket and IAM user automatically.' },
-        aws: { title: 'AWS S3 storage', desc: 'Bucket, IAM user, file uploads', pending: 'Configure S3 for file storage — create a bucket and IAM user, or use automatic setup.' },
-        deploy: { title: 'Deploy application', desc: 'Pull images and start services', pending: 'Pull the container image and start the application.' },
-        superuser: { title: 'Django Admin account', desc: 'First superuser', pending: 'Create the first Django Admin superuser account.' },
-        nginx: { title: 'Nginx and HTTPS', desc: 'Reverse proxy and Let\'s Encrypt', pending: 'Set up Nginx, obtain an HTTPS certificate, and connect your domain.' },
-        finish: { title: 'Installation complete', desc: 'Summary and next steps', pending: 'Review the installation summary.' },
+        system: { title: 'System requirements', desc: 'Ubuntu/Debian, root, Python 3', pending: 'Checking OS, root access, and Python 3.', mascot: 'First I make sure this machine is ready: Ubuntu or Debian, root access, and Python 3. Without these basics nothing else will work reliably.' },
+        ufw: { title: 'Firewall (UFW)', desc: 'Open ports 22, 80, 443', pending: 'Configure the firewall: allow SSH, HTTP, and HTTPS.', mascot: 'I close every door except the ones we need: SSH, HTTP, and HTTPS. Firewall goes first — before we install anything that listens on the network.' },
+        docker: { title: 'Docker', desc: 'Engine and Compose plugin', pending: 'Install Docker Engine and the Compose plugin.', mascot: 'RMBL runs in Docker containers — database, cache, and app stay isolated and update with a single command, without messing up the host system.' },
+        ghcr: { title: 'Container registry (GHCR)', desc: 'Access key from maintainer', pending: 'Log in to GHCR with the access key from the maintainer.', mascot: 'App images live in a private registry (GHCR). Paste the access key from your maintainer — I will log Docker in so it can pull the server image.' },
+        env: { title: 'Server configuration (.env)', desc: 'Domain, DNS, database, Redis', pending: 'Specify the server domain, set up DNS (see below), then save configuration.', mascot: 'Here we create the server config: domain, secrets, database passwords. I generate the secrets — you only need to enter your domain and check DNS.' },
+        awscli: { title: 'AWS CLI', desc: 'Command-line tool for S3 setup', pending: 'Install AWS CLI — needed to create the S3 bucket and IAM user automatically.', mascot: 'AWS CLI lets me create an S3 bucket and IAM user automatically. One install now saves a lot of manual clicking in the AWS console later.' },
+        aws: { title: 'AWS S3 storage', desc: 'Bucket, IAM user, file uploads', pending: 'Configure S3 for file storage — create a bucket and IAM user, or use automatic setup.', mascot: 'Uploaded files go to a private S3 bucket. You can auto-provision with bootstrap keys or enter app credentials manually — either way I verify access before moving on.' },
+        deploy: { title: 'Deploy application', desc: 'Pull images and start services', pending: 'Pull the container image and start the application.', mascot: 'Now the fun part: pull the image and start containers — database, Redis, web server, and background workers. This takes a minute or two.' },
+        superuser: { title: 'Django Admin account', desc: 'First superuser', pending: 'Create the first Django Admin superuser account.', mascot: 'We create a Django Admin superuser — this is the internal server panel, not a messenger account. Pick a strong password and keep it safe.' },
+        nginx: { title: 'Nginx and HTTPS', desc: 'Reverse proxy and Let\'s Encrypt', pending: 'Set up Nginx, obtain an HTTPS certificate, and connect your domain.', mascot: 'I install Nginx and get a free HTTPS certificate from Let\'s Encrypt. Without HTTPS browsers and apps will not trust your server.' },
+        finish: { title: 'Installation complete', desc: 'Summary and next steps', pending: 'Review the installation summary.', mascot: 'We did it! Below is a health check of every service. When you are satisfied, finish to close the installer — your server keeps running.' },
       },
       ru: {
-        system: { title: 'Требования к системе', desc: 'Ubuntu/Debian, root, Python 3', pending: 'Проверим ОС, права root и наличие Python 3.' },
-        ufw: { title: 'Firewall (UFW)', desc: 'Порты 22, 80, 443', pending: 'Настроим firewall: откроем SSH, HTTP и HTTPS.' },
-        docker: { title: 'Docker', desc: 'Engine и Compose plugin', pending: 'Установим Docker Engine и Compose plugin.' },
-        ghcr: { title: 'Реестр образов (GHCR)', desc: 'Ключ от мейнтейнера', pending: 'Войдём в GHCR с ключом доступа от мейнтейнера.' },
-        env: { title: 'Создание и заполнение файла конфигурации сервера (.env)', desc: 'Домен, DNS, БД, Redis', pending: 'Укажи домен, настрой DNS (ниже), сохрани конфигурацию.' },
-        awscli: { title: 'AWS CLI', desc: 'Утилита для настройки S3', pending: 'Установим AWS CLI — нужен для автоматического создания bucket и IAM-пользователя.' },
-        aws: { title: 'AWS S3 — хранение файлов', desc: 'Bucket, IAM, загрузки', pending: 'Настрой S3 — bucket и IAM-пользователь, или автоматическая настройка.' },
-        deploy: { title: 'Деплой приложения', desc: 'Образ и запуск сервисов', pending: 'Скачаем образ и запустим контейнеры приложения.' },
-        superuser: { title: 'Аккаунт Django Admin', desc: 'Первый суперпользователь', pending: 'Создадим первого суперпользователя Django Admin.' },
-        nginx: { title: 'Nginx и HTTPS', desc: 'Reverse proxy и Let\'s Encrypt', pending: 'Настроим Nginx, получим HTTPS-сертификат и привяжем домен.' },
-        finish: { title: 'Установка завершена', desc: 'Сводка и дальнейшие шаги', pending: 'Ознакомься со сводкой по установке.' },
+        system: { title: 'Требования к системе', desc: 'Ubuntu/Debian, root, Python 3', pending: 'Проверим ОС, права root и наличие Python 3.', mascot: 'Сначала проверю, что машина готова: Ubuntu или Debian, root и Python 3. Без этого дальше ставить бессмысленно.' },
+        ufw: { title: 'Firewall (UFW)', desc: 'Порты 22, 80, 443', pending: 'Настроим firewall: откроем SSH, HTTP и HTTPS.', mascot: 'Закрываю все двери, кроме нужных: SSH, HTTP и HTTPS. Файрвол — первая линия обороны, поэтому настраиваем его до установки всего остального.' },
+        docker: { title: 'Docker', desc: 'Engine и Compose plugin', pending: 'Установим Docker Engine и Compose plugin.', mascot: 'RMBL работает в Docker-контейнерах — база, кэш и приложение изолированы и обновляются одной командой, без конфликтов с системой.' },
+        ghcr: { title: 'Реестр образов (GHCR)', desc: 'Ключ от мейнтейнера', pending: 'Войдём в GHCR с ключом доступа от мейнтейнера.', mascot: 'Образы приложения лежат в приватном реестре GHCR. Вставь ключ от мейнтейнера — я залогиню Docker, чтобы скачать образ сервера.' },
+        env: { title: 'Конфигурация сервера (.env)', desc: 'Домен, DNS, БД, Redis', pending: 'Укажи домен, настрой DNS (ниже), сохрани конфигурацию.', mascot: 'Здесь рождается конфигурация: домен, ключи, пароли. Секреты сгенерирую сам — тебе нужно только указать домен и проверить DNS.' },
+        awscli: { title: 'AWS CLI', desc: 'Утилита для настройки S3', pending: 'Установим AWS CLI — нужен для автоматического создания bucket и IAM-пользователя.', mascot: 'AWS CLI позволяет автоматически создать S3 bucket и IAM-пользователя. Одна установка сейчас — меньше ручной работы в консоли AWS потом.' },
+        aws: { title: 'AWS S3 — хранение файлов', desc: 'Bucket, IAM, загрузки', pending: 'Настрой S3 — bucket и IAM-пользователь, или автоматическая настройка.', mascot: 'Загруженные файлы хранятся в приватном S3 bucket. Можно настроить автоматически с bootstrap-ключами или ввести credentials вручную — в любом случае проверю доступ.' },
+        deploy: { title: 'Деплой приложения', desc: 'Образ и запуск сервисов', pending: 'Скачаем образ и запустим контейнеры приложения.', mascot: 'Самое интересное: скачиваю образ и запускаю контейнеры — базу, Redis, веб и воркеры. Займёт пару минут.' },
+        superuser: { title: 'Аккаунт Django Admin', desc: 'Первый суперпользователь', pending: 'Создадим первого суперпользователя Django Admin.', mascot: 'Создаём админа Django — это внутренняя админка сервера, не аккаунт мессенджера. Придумай надёжный пароль и сохрани его.' },
+        nginx: { title: 'Nginx и HTTPS', desc: 'Reverse proxy и Let\'s Encrypt', pending: 'Настроим Nginx, получим HTTPS-сертификат и привяжем домен.', mascot: 'Ставлю nginx и получаю HTTPS-сертификат от Let\'s Encrypt. Без него браузеры и приложения не будут доверять твоему серверу.' },
+        finish: { title: 'Установка завершена', desc: 'Сводка и дальнейшие шаги', pending: 'Ознакомься со сводкой по установке.', mascot: 'Готово! Ниже — проверка всех сервисов. Когда всё ок, заверши установку — сервер продолжит работать без мастера.' },
       },
     };
+
+    const FORM_STEPS = new Set(['ghcr', 'env', 'aws', 'superuser', 'nginx']);
+    const BUILD_MASCOT_STEPS = new Set(['deploy', 'nginx']);
 
     let lang = localStorage.getItem('installer_lang') || 'en';
     const params = new URLSearchParams(location.search);
     const TOKEN = params.get('token') || '';
     let state = null, currentStepId = null, logOffset = 0, busy = false, lastFormStepId = null, lastActionResult = null;
     let stepBusyPhase = '', fastLogPollTimer = null;
+    let autoRunning = false, autoPaused = false, viewingDoneStep = false;
     const LONG_RUNNING_STEPS = new Set(['deploy', 'nginx']);
+
+    function mascotAsset(stepId) {
+      if (stepId === 'finish') return '/assets/mascot-5-action-light.svg';
+      if (BUILD_MASCOT_STEPS.has(stepId)) return '/assets/mascot-8-build-light.svg';
+      return '/assets/mascot-6-wave-light.svg';
+    }
+
+    function renderMascotTip(stepId) {
+      const el = document.getElementById('mascot-tip');
+      if (!el) return;
+      const meta = stepMeta(stepId);
+      if (!meta.mascot) { el.classList.add('hidden'); return; }
+      el.classList.remove('hidden');
+      el.innerHTML = `<img src="${mascotAsset(stepId)}" alt=""><div><p><strong>${esc(t('mascotSays'))}</strong>${esc(meta.mascot)}</p></div>`;
+    }
+
+    function showScreen(name) {
+      document.getElementById('screen-start').classList.toggle('hidden', name !== 'start');
+      document.getElementById('screen-wizard').classList.toggle('hidden', name !== 'wizard');
+      document.getElementById('screen-shutdown').classList.toggle('hidden', name !== 'shutdown');
+    }
+
+    function renderStartScreen() {
+      document.getElementById('start-headline').textContent = t('startHeadline');
+      document.getElementById('start-sub').textContent = t('startSub');
+      document.getElementById('start-bubble').textContent = t('startBubble');
+      document.getElementById('start-auto-tag').textContent = t('startAutoTag');
+      document.getElementById('start-auto-title').textContent = t('startAutoTitle');
+      document.getElementById('start-auto-desc').textContent = t('startAutoDesc');
+      document.getElementById('start-auto-btn').textContent = t('startAutoBtn');
+      document.getElementById('start-manual-title').textContent = t('startManualTitle');
+      document.getElementById('start-manual-desc').textContent = t('startManualDesc');
+      document.getElementById('start-manual-btn').textContent = t('startManualBtn');
+      document.getElementById('start-resume-btn').textContent = t('startResume');
+      document.getElementById('start-lang-en').classList.toggle('active', lang === 'en');
+      document.getElementById('start-lang-ru').classList.toggle('active', lang === 'ru');
+      const hasProgress = state?.steps?.some(s => s.status === 'done');
+      document.getElementById('start-resume-wrap').classList.toggle('hidden', !hasProgress);
+    }
+
+    async function setInstallMode(mode) {
+      await api('/api/mode', { method: 'POST', body: JSON.stringify({ mode }) });
+      state.install_mode = mode;
+      state.install_started = true;
+      autoPaused = false;
+      showScreen('wizard');
+      updateModeBadge();
+      await refreshState(true);
+      if (mode === 'auto') runAutoFlow();
+    }
+
+    function updateModeBadge() {
+      const badge = document.getElementById('mode-badge');
+      if (!badge || !state?.install_started) { badge?.classList.add('hidden'); return; }
+      badge.classList.remove('hidden');
+      const isAuto = state.install_mode === 'auto';
+      badge.textContent = isAuto ? (autoPaused ? t('modePause') : t('modeAuto')) : t('modeManual');
+      badge.classList.toggle('paused', isAuto && autoPaused);
+      badge.title = isAuto ? (autoPaused ? t('modeResume') : t('modePause')) : '';
+      badge.onclick = isAuto ? toggleAutoPause : null;
+    }
+
+    async function toggleAutoPause() {
+      autoPaused = !autoPaused;
+      await api('/api/auto-pause', { method: 'POST', body: JSON.stringify({ paused: autoPaused }) });
+      updateModeBadge();
+      if (!autoPaused) runAutoFlow();
+    }
 
     function t(k) { return (UI[lang] && UI[lang][k]) || UI.en[k] || k; }
     function stepMeta(id) { return (STEPS_I18N[lang] && STEPS_I18N[lang][id]) || STEPS_I18N.en[id] || { title: id, desc: '', pending: '' }; }
@@ -626,8 +858,53 @@
 
     function defaultStepBusyLabel() {
       if (currentStepId === 'nginx') return t('nginxWorking');
-      if (currentStepId === 'deploy') return t('deployWorking');
-      return t('deployWorking');
+      return t('buildingServer');
+    }
+
+    async function runAutoFlow() {
+      if (autoRunning || autoPaused || state?.install_mode !== 'auto') return;
+      if (busy || isAwsStepBusy()) return;
+      const step = state?.steps?.find(s => s.id === currentStepId);
+      if (!step || step.id === 'finish') return;
+
+      if (step.status === 'done') {
+        const idx = state.steps.findIndex(s => s.id === currentStepId);
+        if (idx >= 0 && idx < state.steps.length - 1) {
+          currentStepId = state.steps[idx + 1].id;
+          lastFormStepId = null;
+          viewingDoneStep = false;
+          renderStepList();
+          renderCurrentStep();
+          setTimeout(runAutoFlow, 350);
+        }
+        return;
+      }
+
+      if (FORM_STEPS.has(step.id)) {
+        viewingDoneStep = false;
+        renderCurrentStep();
+        return;
+      }
+
+      autoRunning = true;
+      try {
+        const checkRes = await api('/api/step/' + step.id + '/check', {
+          method: 'POST',
+          body: JSON.stringify(collectPayload(step.id)),
+        });
+        const checkData = await checkRes.json();
+        if (checkData.ok) {
+          showActionResult({ ...checkData, already_done: true }, false);
+          await refreshState(true);
+          setTimeout(runAutoFlow, 450);
+          return;
+        }
+        await runAction('apply', false, false);
+      } catch (_) {
+        /* user can retry manually */
+      } finally {
+        autoRunning = false;
+      }
     }
 
     function syncStepBusyOverlay() {
@@ -638,7 +915,7 @@
       if (!overlay) return;
       overlay.classList.toggle('hidden', !show);
       if (show) {
-        overlay.innerHTML = '<span class="spinner"></span>' + esc(stepBusyPhase || defaultStepBusyLabel());
+        overlay.innerHTML = '<img src="/assets/mascot-4-build-anim.svg" alt=""><span class="spinner"></span>' + esc(stepBusyPhase || defaultStepBusyLabel());
       }
     }
 
@@ -700,13 +977,18 @@
       const overlay = document.getElementById('aws-busy-overlay');
       if (overlay) {
         overlay.classList.toggle('hidden', !locked);
-        overlay.textContent = op === 'provision'
+        const label = op === 'provision'
           ? t('awsProvisioning')
           : op === 'verify'
             ? t('awsChecking')
             : locked
               ? t('awsWorking')
               : '';
+        if (locked) {
+          overlay.innerHTML = '<img src="/assets/mascot-4-build-anim.svg" alt="">' + esc(label);
+        } else {
+          overlay.innerHTML = '';
+        }
       }
 
       const provisionBtn = document.getElementById('aws-provision-btn');
@@ -945,8 +1227,11 @@
       const commands = (d.commands || []).join('\n');
       el.innerHTML = `
         <div class="finish-hero ${allOk ? '' : 'warn'}">
-          <h3>${allOk ? '✓' : '!'} ${esc(t('finishCompleteTitle'))}</h3>
-          <p>${esc(allOk ? t('finishAllRunning') : t('finishSomeIssues'))}</p>
+          <img src="/assets/mascot-5-action-light.svg" alt="">
+          <div class="finish-hero-text">
+            <h3>${allOk ? '✓' : '!'} ${esc(t('finishCompleteTitle'))}</h3>
+            <p>${esc(allOk ? t('finishAllRunning') : t('finishSomeIssues'))}</p>
+          </div>
         </div>
         <div class="finish-grid">
           <div class="finish-card">
@@ -1051,12 +1336,30 @@
       document.getElementById('lang-ru').classList.toggle('active', l === 'ru');
       document.getElementById('hdr-title').textContent = t('title');
       document.getElementById('log-title').textContent = t('log');
+      const sidebarTitle = document.getElementById('sidebar-title');
+      if (sidebarTitle) sidebarTitle.textContent = t('sidebarSteps');
+      renderStartScreen();
       lastFormStepId = null;
-      if (state) { renderStepList(); renderCurrentStep(); }
+      if (state) { renderStepList(); if (!document.getElementById('screen-wizard').classList.contains('hidden')) renderCurrentStep(); }
     }
 
     document.getElementById('lang-en').onclick = () => setLang('en');
     document.getElementById('lang-ru').onclick = () => setLang('ru');
+    document.getElementById('start-lang-en').onclick = () => setLang('en');
+    document.getElementById('start-lang-ru').onclick = () => setLang('ru');
+    document.getElementById('start-auto-btn').onclick = () => setInstallMode('auto');
+    document.getElementById('start-manual-btn').onclick = () => setInstallMode('manual');
+    document.getElementById('start-resume-btn').onclick = async () => {
+      if (!state.install_started) {
+        await api('/api/mode', { method: 'POST', body: JSON.stringify({ mode: 'manual' }) });
+        state.install_started = true;
+        state.install_mode = 'manual';
+      }
+      showScreen('wizard');
+      updateModeBadge();
+      await refreshState(true);
+      if (state?.install_mode === 'auto' && !autoPaused) runAutoFlow();
+    };
 
     function api(path, options = {}) {
       const url = new URL(path, location.origin);
@@ -1072,10 +1375,12 @@
       const res = await api('/api/state');
       if (!res.ok) throw new Error(t('error'));
       state = await res.json();
+      autoPaused = !!state.auto_paused;
       document.getElementById('install-dir').textContent = t('directory') + ': ' + state.install_dir;
       if (!currentStepId) currentStepId = state.current_step;
+      updateModeBadge();
       renderStepList();
-      renderCurrentStep();
+      if (!document.getElementById('screen-wizard').classList.contains('hidden')) renderCurrentStep();
     }
 
     async function pollLog() {
@@ -1102,7 +1407,15 @@
         const meta = stepMeta(step.id);
         const div = document.createElement('div');
         div.className = 'step-item' + (step.id === currentStepId ? ' active' : '') + (step.status === 'done' ? ' done' : '') + (step.status === 'error' ? ' error' : '');
-        div.onclick = () => { currentStepId = step.id; lastFormStepId = null; lastActionResult = null; renderStepList(); renderCurrentStep(); };
+        div.onclick = () => {
+          currentStepId = step.id;
+          lastFormStepId = null;
+          lastActionResult = null;
+          viewingDoneStep = step.status === 'done' && step.id !== 'finish';
+          renderStepList();
+          renderCurrentStep();
+          if (state?.install_mode === 'auto' && !autoPaused && step.status !== 'done') runAutoFlow();
+        };
         div.innerHTML = '<div class="step-dot">' + (step.status === 'done' ? '✓' : (idx + 1)) + '</div>' +
           '<div><div class="step-title">' + esc(meta.title) + '</div><div class="step-desc">' + esc(meta.desc) + '</div></div>';
         el.appendChild(div);
@@ -1113,6 +1426,14 @@
       const step = state.steps.find(s => s.id === currentStepId);
       if (!step) return;
       const meta = stepMeta(step.id);
+      renderMascotTip(step.id);
+      const doneBadge = document.getElementById('done-badge');
+      if (viewingDoneStep && step.status === 'done' && step.id !== 'finish') {
+        doneBadge.classList.remove('hidden');
+        doneBadge.textContent = t('doneBadge');
+      } else {
+        doneBadge.classList.add('hidden');
+      }
       document.getElementById('step-title').textContent = meta.title;
       document.getElementById('step-desc').textContent = meta.desc;
       const statusEl = document.getElementById('step-status');
@@ -1150,6 +1471,9 @@
       if (lastFormStepId !== step.id) {
         renderForm(step);
         lastFormStepId = step.id;
+      }
+      if (viewingDoneStep && step.status === 'done' && step.id !== 'finish') {
+        document.getElementById('step-form').classList.add('hidden');
       }
       renderActions(step);
       if (step.id === 'aws') syncAwsFormButtons();
@@ -1483,18 +1807,42 @@
     function renderActions(step) {
       const actions = document.getElementById('step-actions');
       actions.innerHTML = '';
+      const isDoneView = viewingDoneStep && step.status === 'done' && step.id !== 'finish';
       if (step.id === 'finish') {
         actions.appendChild(mkBtn(t('finishRefresh'), 'secondary', refreshFinishStatus, 'finish-refresh-btn'));
         actions.appendChild(mkBtn(t('finish'), 'primary', finishInstaller));
         return;
       }
-      actions.appendChild(mkBtn(t('runAuto'), 'primary', () => runAction('apply')));
-      actions.appendChild(mkBtn(t('verify'), 'secondary', () => runAction('check')));
-      actions.appendChild(mkBtn(t('skip'), 'secondary', () => runAction('skip')));
+      if (isDoneView) {
+        actions.appendChild(mkBtn(t('recheck'), 'secondary', () => runAction('check')));
+        const idx = state.steps.findIndex(s => s.id === step.id);
+        if (idx < state.steps.length - 1) {
+          actions.appendChild(mkBtn(t('next'), 'secondary', () => {
+            currentStepId = state.steps[idx + 1].id;
+            lastFormStepId = null;
+            viewingDoneStep = false;
+            renderStepList();
+            renderCurrentStep();
+          }));
+        }
+        return;
+      }
+      if (step.status !== 'done') {
+        actions.appendChild(mkBtn(t('runAuto'), 'primary', () => runAction('apply')));
+        actions.appendChild(mkBtn(t('verify'), 'secondary', () => runAction('check')));
+        actions.appendChild(mkBtn(t('skip'), 'secondary', () => runAction('skip')));
+      }
       if (step.status === 'done') {
+        actions.appendChild(mkBtn(t('recheck'), 'secondary', () => runAction('check')));
         actions.appendChild(mkBtn(t('next'), 'secondary', () => {
           const idx = state.steps.findIndex(s => s.id === step.id);
-          if (idx < state.steps.length - 1) { currentStepId = state.steps[idx + 1].id; lastFormStepId = null; renderStepList(); renderCurrentStep(); }
+          if (idx < state.steps.length - 1) {
+            currentStepId = state.steps[idx + 1].id;
+            lastFormStepId = null;
+            viewingDoneStep = false;
+            renderStepList();
+            renderCurrentStep();
+          }
         }));
       }
     }
@@ -1520,8 +1868,10 @@
       if (action === 'skip' || step.status === 'done' || action === 'apply' || action === 'check') {
         currentStepId = state.steps[idx + 1].id;
         lastFormStepId = null;
+        viewingDoneStep = false;
         renderStepList();
         renderCurrentStep();
+        if (state?.install_mode === 'auto' && !autoPaused) setTimeout(runAutoFlow, 400);
       }
     }
 
@@ -1608,7 +1958,9 @@
         if (data.ok) lastActionResult = null;
         const statusEl = document.getElementById('step-status');
         statusEl.classList.remove('hidden', 'ok', 'fail', 'info');
-        statusEl.textContent = data.message || (data.ok ? 'OK' : t('error'));
+        let msg = data.message || (data.ok ? 'OK' : t('error'));
+        if (data.already_done) msg = t('alreadyDone');
+        statusEl.textContent = msg;
         statusEl.classList.add(data.ok ? 'ok' : 'fail');
       }
       if (data.data?.statuses) {
@@ -1627,18 +1979,31 @@
     async function finishInstaller() {
       if (!confirm(t('finishConfirm'))) return;
       await api('/api/finish', { method: 'POST', body: '{}' });
-      const statusEl = document.getElementById('step-status');
-      statusEl.textContent = t('shuttingDown');
-      statusEl.classList.remove('hidden');
+      document.getElementById('shutdown-title').textContent = t('shutdownTitle');
+      document.getElementById('shutdown-desc').textContent = t('shutdownDesc');
+      showScreen('shutdown');
     }
 
     async function init() {
       setLang(lang);
-      if (!TOKEN) { document.body.innerHTML = '<div style="padding:40px;color:#ef4444">' + t('noToken') + '</div>'; return; }
+      if (!TOKEN) {
+        showScreen('start');
+        document.getElementById('screen-start').innerHTML = '<div style="padding:40px;color:#c0392b;text-align:center">' + t('noToken') + '</div>';
+        return;
+      }
       try {
         await refreshState();
+        if (state.install_started) {
+          showScreen('wizard');
+          updateModeBadge();
+          if (state.install_mode === 'auto' && !autoPaused) setTimeout(runAutoFlow, 600);
+        } else {
+          renderStartScreen();
+          showScreen('start');
+        }
         setInterval(pollLog, 1500);
       } catch (e) {
+        showScreen('wizard');
         document.getElementById('step-status').textContent = t('error') + ': ' + e.message;
         document.getElementById('step-status').classList.remove('hidden');
       }

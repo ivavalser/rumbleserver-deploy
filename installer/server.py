@@ -16,6 +16,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 INSTALL_DIR = Path(os.environ.get("RUMBLE_INSTALL_DIR", Path(__file__).resolve().parent.parent))
+ASSETS_DIR = INSTALL_DIR / "installer" / "assets"
+ALLOWED_ASSET_EXTENSIONS = {".svg"}
 sys.path.insert(0, str(INSTALL_DIR / "installer"))
 
 from steps import (  # noqa: E402
@@ -111,6 +113,20 @@ class InstallerHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _serve_asset(self, name: str) -> None:
+        if not name or ".." in name or name.startswith("/"):
+            self.send_error(HTTPStatus.BAD_REQUEST)
+            return
+        path = (ASSETS_DIR / name).resolve()
+        if not path.is_relative_to(ASSETS_DIR.resolve()):
+            self.send_error(HTTPStatus.FORBIDDEN)
+            return
+        if path.suffix.lower() not in ALLOWED_ASSET_EXTENSIONS:
+            self.send_error(HTTPStatus.FORBIDDEN)
+            return
+        content_types = {".svg": "image/svg+xml"}
+        self._file_response(path, content_types.get(path.suffix.lower(), "application/octet-stream"))
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
@@ -121,6 +137,10 @@ class InstallerHandler(BaseHTTPRequestHandler):
 
         if path in ("/aws-guide.html", "/aws-guide"):
             self._file_response(INSTALL_DIR / "installer" / "aws-guide.html", "text/html; charset=utf-8")
+            return
+
+        if path.startswith("/assets/"):
+            self._serve_asset(path[len("/assets/"):])
             return
 
         if path == "/api/state":
@@ -144,6 +164,9 @@ class InstallerHandler(BaseHTTPRequestHandler):
                         "public_ip": public_ip,
                         "dns_hint": dns_setup_hint(domain, public_ip or None),
                         "admin_username": self.ctx.get("admin_username", ""),
+                        "install_mode": self.ctx.get("install_mode", ""),
+                        "install_started": bool(self.ctx.get("install_started")),
+                        "auto_paused": bool(self.ctx.get("auto_paused")),
                     },
                 )
             return
@@ -243,6 +266,21 @@ class InstallerHandler(BaseHTTPRequestHandler):
                         if not step.apply:
                             self._json_response(HTTPStatus.BAD_REQUEST, {"error": "no apply"})
                             return
+                        precheck = step.check(self.ctx)
+                        if precheck.ok:
+                            save_step_check_cache(self.ctx, step_id, precheck)
+                            self._json_response(
+                                HTTPStatus.OK,
+                                {
+                                    "ok": True,
+                                    "message": precheck.message,
+                                    "manual": precheck.manual,
+                                    "cwd": precheck.cwd,
+                                    "data": precheck.data,
+                                    "already_done": True,
+                                },
+                            )
+                            return
                         result = step.apply(self.ctx, payload)
                     elif action == "skip":
                         result = StepResult(
@@ -308,6 +346,32 @@ class InstallerHandler(BaseHTTPRequestHandler):
                         "manual": "Open /aws-guide.html for manual setup instructions.",
                     },
                 )
+            return
+
+        if path == "/api/mode":
+            if not self._require_auth():
+                return
+            payload = self._read_json()
+            mode = (payload.get("mode") or "").strip().lower()
+            if mode not in ("auto", "manual"):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid mode"})
+                return
+            with STATE_LOCK:
+                self.ctx.set("install_mode", mode)
+                self.ctx.set("install_started", True)
+                if mode == "auto":
+                    self.ctx.set("auto_paused", False)
+            self._json_response(HTTPStatus.OK, {"ok": True, "mode": mode})
+            return
+
+        if path == "/api/auto-pause":
+            if not self._require_auth():
+                return
+            payload = self._read_json()
+            paused = bool(payload.get("paused"))
+            with STATE_LOCK:
+                self.ctx.set("auto_paused", paused)
+            self._json_response(HTTPStatus.OK, {"ok": True, "paused": paused})
             return
 
         if path == "/api/finish":
