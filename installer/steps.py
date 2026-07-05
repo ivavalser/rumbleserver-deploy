@@ -1140,8 +1140,6 @@ def apply_nginx(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
     email = (payload.get("certbot_email") or ctx.get("certbot_email") or "").strip()
     if not domain:
         return _fail("Domain not set.")
-    if not email:
-        return _fail("Enter email for Let's Encrypt.")
 
     dns = check_dns(ctx)
     if not dns.ok:
@@ -1165,20 +1163,20 @@ def apply_nginx(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
     ctx.run(["nginx", "-t"])
     ctx.run(["systemctl", "reload", "nginx"])
 
-    ctx.run(
-        [
-            "certbot",
-            "--nginx",
-            "-d",
-            domain,
-            "--non-interactive",
-            "--agree-tos",
-            "-m",
-            email,
-            "--redirect",
-        ],
-        check=False,
-    )
+    certbot_cmd = [
+        "certbot",
+        "--nginx",
+        "-d",
+        domain,
+        "--non-interactive",
+        "--agree-tos",
+        "--redirect",
+    ]
+    if email:
+        certbot_cmd.extend(["-m", email])
+    else:
+        certbot_cmd.append("--register-unsafely-without-email")
+    ctx.run(certbot_cmd, check=False)
     ctx.run(["certbot", "renew", "--dry-run"], check=False)
     return check_nginx(ctx)
 
