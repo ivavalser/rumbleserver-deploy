@@ -47,7 +47,16 @@
     button.secondary:hover { background: var(--border); }
     button.btn:disabled { opacity: .55; cursor: not-allowed; }
     .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .form-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-width: 420px;
+      margin-bottom: 16px;
+    }
     label { display: flex; flex-direction: column; gap: 6px; font-size: 0.82rem; color: var(--muted); }
+    label .field-label { color: var(--muted); }
+    label input, label select { width: 100%; }
     input { background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 10px 12px; font-size: 0.9rem; }
     input:focus { outline: 2px solid rgba(59,130,246,.45); border-color: var(--accent); }
     .checkbox-row { display: flex; align-items: center; gap: 8px; margin: 8px 0 12px; color: var(--text); font-size: 0.9rem; }
@@ -264,6 +273,10 @@
         deployPulling: 'Pulling container images…',
         deployStarting: 'Starting services…',
         deployWaiting: 'Waiting for application to start…',
+        adminUsername: 'Username',
+        adminEmail: 'Email',
+        adminPassword: 'Password',
+        adminEmailPh: 'admin@example.com',
       },
       ru: {
         title: 'Rumble Server — установщик',
@@ -339,6 +352,10 @@
         deployPulling: 'Скачиваем образы контейнеров…',
         deployStarting: 'Запускаем сервисы…',
         deployWaiting: 'Ждём запуск приложения…',
+        adminUsername: 'Имя пользователя',
+        adminEmail: 'Email',
+        adminPassword: 'Пароль',
+        adminEmailPh: 'admin@example.com',
         externalDb: 'Внешняя PostgreSQL',
         externalRedis: 'Внешний Redis',
         strongPassword: 'Сильный пароль',
@@ -1008,17 +1025,19 @@
       }
       if (step.id === 'superuser') {
         formEl.classList.remove('hidden');
-        formEl.innerHTML = `<div class="form-grid">
-          <label>Username<input type="text" id="admin_username" value="${esc(state.admin_username || 'admin')}"></label>
-          <label>Email<input type="email" id="admin_email" placeholder="admin@example.com"></label>
-          <label>Password<input type="password" id="admin_password" placeholder="${t('strongPassword')}"></label></div>`;
+        formEl.innerHTML = `<div class="form-stack">
+          <label><span class="field-label">${t('adminUsername')}</span><input type="text" id="admin_username" autocomplete="username" value="${esc(state.admin_username || 'admin')}"></label>
+          <label><span class="field-label">${t('adminEmail')}</span><input type="email" id="admin_email" autocomplete="email" placeholder="${esc(t('adminEmailPh'))}"></label>
+          <label><span class="field-label">${t('adminPassword')}</span><input type="password" id="admin_password" autocomplete="new-password" placeholder="${esc(t('strongPassword'))}"></label>
+        </div>`;
         return;
       }
       if (step.id === 'nginx') {
         formEl.classList.remove('hidden');
-        formEl.innerHTML = `<div class="form-grid">
-          <label>${t('domainLabel')}<input type="text" id="nginx_domain" value="${esc(state.domain || d.domain || '')}" readonly></label>
-          <label>${t('certbotEmail')}<input type="email" id="certbot_email" placeholder="you@example.com"></label></div>
+        formEl.innerHTML = `<div class="form-stack">
+          <label><span class="field-label">${t('domainLabel')}</span><input type="text" id="nginx_domain" value="${esc(state.domain || d.domain || '')}" readonly></label>
+          <label><span class="field-label">${t('certbotEmail')}</span><input type="email" id="certbot_email" autocomplete="email" placeholder="you@example.com"></label>
+        </div>
           <div class="actions" style="margin:0"><button class="btn secondary" type="button" id="dns-check-btn">${t('checkDns')}</button></div>`;
         formEl.querySelector('#dns-check-btn').onclick = () => runAction('check', true, true);
         return;
