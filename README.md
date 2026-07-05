@@ -1,6 +1,6 @@
 # RMBL Server — operator deploy bundle
 
-This repository contains deployment scripts and a **web installer** for **RMBL Server** (Rumble messenger backend).
+This repository contains deployment scripts and a **web installer** for **RMBL Server**.
 
 Operators **do not clone** the application source code. Only deploy files from this repository are placed on the server. The application itself is pulled as a pre-built Docker image from GHCR.
 
@@ -15,23 +15,14 @@ Operators **do not clone** the application source code. Only deploy files from t
 
 ## Installation (web wizard) — recommended
 
-### From Mac: remote install + auto-open browser
-
-From the `rumbleserver` source repo (or after `publish-operator`):
-
-```bash
-./deploy/operator/install-remote.sh root@YOUR_VPS_IP
-```
-
-The script starts the installer on the VPS over SSH and opens the URL **in your local browser**.
-
-### Directly on the VPS (SSH)
-
 **First run:**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/installer.sh | sudo bash
 ```
+
+<details>
+<summary><strong>You have a fix for the installer and want to continue installation</strong></summary>
 
 **Update the installer (keep progress)** — stop the process and run again. **Do not delete** the install directory: it holds `.env`, `.installer-state.json`, and wizard progress.
 
@@ -58,15 +49,11 @@ curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/
 
 > `rm -rf` removes `.env` and `.installer-state.json` — all wizard progress is lost. It is **not needed** to update the installer UI.
 
+</details>
+
 > `sudo` drops environment variables — use `sudo env VAR=... bash`, not `sudo VAR=... bash`.
 
 Open the `Open: http://...` line **on your own computer** (the browser on the VPS will not open it).
-
-Re-open the installer from Mac:
-
-```bash
-open "$(ssh root@YOUR_VPS_IP 'cat /root/rumbleserver/.installer-url')"
-```
 
 The script will:
 
@@ -98,22 +85,6 @@ curl -fsSL .../installer.sh | sudo RUMBLE_DIR=/opt/rumble bash
 
 Installer log: `tail -f ~/rumbleserver/installer.log`
 
-## Installation (manual) — fallback
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/install.sh | bash
-```
-
-The script creates `~/rumbleserver/` with `prod.sh`, `docker-compose.yml`, `env.example`.
-
-```bash
-nano ~/rumbleserver/.env    # ALLOWED_HOSTS, DB_PASS, REDIS_PASSWORD, AWS
-cd ~/rumbleserver
-./prod.sh                   # prompts for image access key on first run
-```
-
-For more detail see [DEPLOY.md](https://github.com/ivavalser/rumbleserver/blob/master/deploy/DEPLOY.md) (source-based deploy) or the nginx/HTTPS sections there.
-
 ## Updates
 
 ```bash
@@ -141,41 +112,6 @@ docker compose --env-file .env --profile local-db --profile local-redis down    
 
 In the web installer, on the `.env` step enable “External PostgreSQL” or “External Redis” — the corresponding containers will not start; external hosts are written to `.env`.
 
-Manual setup — see “External DB/Redis” in [DEPLOY.md](https://github.com/ivavalser/rumbleserver/blob/master/deploy/DEPLOY.md).
-
-## Migration from legacy deploy (git pull + update.sh)
-
-If the server already has `~/rumbleserver` with source code — **do not overwrite it**.
-Install the operator bundle in a separate directory:
-
-```bash
-export RUMBLE_DIR=/opt/rumble
-curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/install.sh | bash
-cp ~/rumbleserver/.env /opt/rumble/.env
-cd ~/rumbleserver && docker compose --env-file .env -f deploy/docker-compose.yml down
-cd /opt/rumble && ./prod.sh
-```
-
-After verification you can remove the old source clone: `rm -rf ~/rumbleserver`
-
-## Operator bundle layout
-
-```
-~/rumbleserver/
-├── installer.sh              # web installer bootstrap (on VPS)
-├── install-remote.sh         # run from Mac + open in local browser
-├── installer/
-│   ├── server.py             # HTTP API + UI
-│   ├── steps.py              # step logic
-│   ├── index.html            # web wizard
-│   └── nginx.conf.template
-├── install.sh                # manual bundle install
-├── prod.sh                   # deploy / update image
-├── docker-compose.yml
-├── env.example
-└── .env                      # created by the installer
-```
-
 </details>
 
 <details>
@@ -189,23 +125,14 @@ After verification you can remove the old source clone: `rm -rf ~/rumbleserver`
 
 ## Установка (веб-визард) — рекомендуется
 
-### С Mac: установка + автооткрытие браузера
-
-Из репозитория `rumbleserver` (или после `publish-operator`):
-
-```bash
-./deploy/operator/install-remote.sh root@YOUR_VPS_IP
-```
-
-Скрипт запустит установщик на VPS по SSH и откроет URL **в локальном браузере**.
-
-### Напрямую на VPS (SSH)
-
 **Первый запуск:**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/installer.sh | sudo bash
 ```
+
+<details>
+<summary><strong>Есть исправление установщика и нужно продолжить установку</strong></summary>
 
 **Обновить установщик (сохранить прогресс)** — только остановить процесс и запустить снова. Папку **не удалять**: в ней `.env`, `.installer-state.json` и прогресс по шагам.
 
@@ -232,15 +159,11 @@ curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/
 
 > `rm -rf` удаляет `.env` и `.installer-state.json` — весь прогресс визарда теряется. Для обновления UI установщика он **не нужен**.
 
+</details>
+
 > `sudo` сбрасывает env — нужен `sudo env VAR=... bash`, не `sudo VAR=... bash`.
 
 Открой строку `Open: http://...` **на своём компьютере** (браузер на VPS не откроется).
-
-Переоткрыть установщик с Mac:
-
-```bash
-open "$(ssh root@YOUR_VPS_IP 'cat /root/rumbleserver/.installer-url')"
-```
 
 Скрипт:
 
@@ -272,22 +195,6 @@ curl -fsSL .../installer.sh | sudo RUMBLE_DIR=/opt/rumble bash
 
 Лог установщика: `tail -f ~/rumbleserver/installer.log`
 
-## Установка (ручная) — fallback
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/install.sh | bash
-```
-
-Скрипт создаст `~/rumbleserver/` с `prod.sh`, `docker-compose.yml`, `env.example`.
-
-```bash
-nano ~/rumbleserver/.env    # ALLOWED_HOSTS, DB_PASS, REDIS_PASSWORD, AWS
-cd ~/rumbleserver
-./prod.sh                   # спросит ключ доступа к образу при первом запуске
-```
-
-Подробная инструкция — в [DEPLOY.md](https://github.com/ivavalser/rumbleserver/blob/master/deploy/DEPLOY.md) (для деплоя из исходников) или разделы nginx/HTTPS там же.
-
 ## Обновление
 
 ```bash
@@ -314,40 +221,5 @@ docker compose --env-file .env --profile local-db --profile local-redis down    
 ## Внешняя PostgreSQL / Redis
 
 В веб-установщике на шаге `.env` включи «Внешняя PostgreSQL» или «Внешний Redis» — соответствующие контейнеры не поднимутся, в `.env` пропишутся внешние хосты.
-
-Вручную — см. раздел «Использование внешней БД/Redis» в [DEPLOY.md](https://github.com/ivavalser/rumbleserver/blob/master/deploy/DEPLOY.md).
-
-## Миграция со старого деплоя (git pull + update.sh)
-
-На сервере уже есть `~/rumbleserver` с исходниками — **не перезаписывай его**.
-Поставь operator-bundle в отдельную папку:
-
-```bash
-export RUMBLE_DIR=/opt/rumble
-curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/install.sh | bash
-cp ~/rumbleserver/.env /opt/rumble/.env
-cd ~/rumbleserver && docker compose --env-file .env -f deploy/docker-compose.yml down
-cd /opt/rumble && ./prod.sh
-```
-
-Старый clone с исходниками можно удалить после проверки: `rm -rf ~/rumbleserver`
-
-## Структура operator bundle
-
-```
-~/rumbleserver/
-├── installer.sh              # bootstrap веб-установщика (на VPS)
-├── install-remote.sh         # запуск с Mac + open в локальном браузере
-├── installer/
-│   ├── server.py             # HTTP API + UI
-│   ├── steps.py              # логика шагов
-│   ├── index.html            # веб-визард
-│   └── nginx.conf.template
-├── install.sh                # ручная установка bundle
-├── prod.sh                   # деплой/обновление образа
-├── docker-compose.yml
-├── env.example
-└── .env                      # создаётся установщиком
-```
 
 </details>
