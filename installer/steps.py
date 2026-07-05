@@ -1078,12 +1078,21 @@ def check_nginx(ctx: InstallerContext) -> StepResult:
     if test.returncode != 0:
         return _fail("nginx -t failed.", manual=test.stderr or test.stdout)
     https = ctx.run(
-        ["curl", "-fsSI", f"https://{domain}/api/"],
+        [
+            "curl",
+            "-sSI",
+            "-o",
+            "/dev/null",
+            "-w",
+            "%{http_code}",
+            f"https://{domain}/admin/",
+        ],
         check=False,
     )
-    if https.returncode != 0:
+    code = (https.stdout or "").strip()
+    if code not in ("200", "301", "302", "404"):
         return _fail(
-            f"HTTPS for {domain} is not responding.",
+            f"HTTPS for {domain} is not responding (code {code or 'n/a'}).",
             manual=f"sudo certbot --nginx -d {domain}",
             cwd="/",
         )
