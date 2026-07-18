@@ -1481,6 +1481,23 @@ def _generate_local_network_access_key() -> str:
     return secrets.token_urlsafe(48)
 
 
+MESSENGER_USERNAME_MAX_LENGTH = 30
+
+
+def _normalize_messenger_username(value: str) -> tuple[str, str | None]:
+    """Same rules as MessengerUser username validation in users/serializers.py."""
+    value = (value or "").strip()
+    if not value:
+        return "", None
+    if len(value) > MESSENGER_USERNAME_MAX_LENGTH:
+        return value, f"Server name must be at most {MESSENGER_USERNAME_MAX_LENGTH} characters long."
+    if not re.match(r"^[a-zA-Z0-9_]+$", value):
+        return value, "Server name can only contain English letters, numbers, and underscore."
+    if len(value) == 1 and not value.isalpha():
+        return value, "Single character server name must be a letter."
+    return value.lower(), None
+
+
 def _default_registration_payload(ctx: InstallerContext) -> dict[str, Any]:
     saved_site = ctx.get("registration_site") or REGISTRATION_SITES[0]
     return {
@@ -1629,12 +1646,13 @@ def apply_registration(ctx: InstallerContext, payload: dict[str, Any]) -> StepRe
         )
 
     users_registration_url = _registration_url_for_site(registration_site)
-    server_name = (payload.get("server_name") or ctx.get("server_name") or "").strip()
-    if len(server_name) > 255:
-        return _fail(
-            "Server name is too long (max 255 characters).",
-            defaults=_default_registration_payload(ctx),
-        )
+    server_name_raw = (payload.get("server_name") or ctx.get("server_name") or "").strip()
+    if server_name_raw:
+        server_name, name_err = _normalize_messenger_username(server_name_raw)
+        if name_err:
+            return _fail(name_err, defaults=_default_registration_payload(ctx))
+    else:
+        server_name = ""
 
     current_data, read_err = _read_appsettings_registration(ctx)
     if read_err and "Complete the deploy step first" in (read_err.message or ""):
