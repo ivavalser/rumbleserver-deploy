@@ -675,7 +675,7 @@
         welcomeSendEmail: 'Send email',
         welcomeS2Title: 'Cloud storage for files (S3-compatible)',
         welcomeS2Lead: 'Chat messages are stored encrypted in your server database. Photos, audio messages, and avatars are stored encrypted in S3-compatible object storage.',
-        welcomeS2Steps: 'You need an S3-compatible storage provider and a bucket for your users\' files and avatars. Amazon AWS is recommended: the installer can set up the bucket and IAM automatically. Selectel, MinIO, and other S3-compatible providers are also supported.',
+        welcomeS2Steps: 'You need an S3-compatible storage provider and a bucket for your users\' files and avatars. Amazon AWS is recommended: the installer can set up the bucket and IAM automatically. MinIO, Wasabi, Selectel, and other S3-compatible providers are also supported.',
         welcomeAwsSignup: 'Create an AWS account (recommended) →',
         welcomeS3Title: 'Server image access key',
         welcomeS3Lead: 'You need an access key from the RMBL Chat team to pull the server Docker image. If you do not have a key yet, request one on the RMBL Chat website.',
@@ -771,7 +771,8 @@
         s3Vendor: 'Storage provider',
         s3VendorAws: 'AWS',
         s3VendorOther: 'Other (S3-compatible)',
-        s3OtherDesc: 'Connect to any S3-compatible provider (e.g. Selectel, MinIO, Wasabi). Create a bucket and access keys in your provider panel, then fill in the fields below.',
+        s3OtherDesc: 'Connect to any S3-compatible provider (e.g. MinIO, Wasabi, Selectel). Create a bucket and access keys in your provider panel, then fill in the fields below.',
+        s3RegionPh: 'my-region',
         s3Endpoint: 'Endpoint URL',
         s3EndpointPh: 'https://s3.storage.example.com',
         s3AddressingStyle: 'Addressing style',
@@ -885,7 +886,7 @@
         welcomeSendEmail: 'Отправить письмо',
         welcomeS2Title: 'Облачное хранилище файлов (S3-compatible)',
         welcomeS2Lead: 'Текстовые сообщения хранятся в зашифрованном виде в БД вашего сервера. Фотографии, аудиосообщения и аватарки хранятся в зашифрованном виде в S3-совместимом объектном хранилище.',
-        welcomeS2Steps: 'Нужен S3-совместимый провайдер и бакет для файлов пользователей и аватарок. Рекомендуем Amazon AWS: установщик может автоматически создать бакет и IAM. Также поддерживаются Selectel, MinIO и другие S3-совместимые провайдеры.',
+        welcomeS2Steps: 'Нужен S3-совместимый провайдер и бакет для файлов пользователей и аватарок. Рекомендуем Amazon AWS: установщик может автоматически создать бакет и IAM. Также поддерживаются MinIO, Wasabi, Selectel и другие S3-совместимые провайдеры.',
         welcomeAwsSignup: 'Создать аккаунт AWS (рекомендуется) →',
         welcomeS3Title: 'Ключ доступа к образу сервера',
         welcomeS3Lead: 'Нужен ключ от команды RMBL Chat для доступа к Docker-образу сервера. Если ключа ещё нет — оставь заявку на сайте RMBL Chat.',
@@ -972,7 +973,8 @@
         s3Vendor: 'Провайдер хранилища',
         s3VendorAws: 'AWS',
         s3VendorOther: 'Другой (S3-compatible)',
-        s3OtherDesc: 'Подключение к любому S3-совместимому провайдеру (например, Selectel, MinIO, Wasabi). Создай бакет и ключи в панели провайдера, затем заполни поля ниже.',
+        s3OtherDesc: 'Подключение к любому S3-совместимому провайдеру (например, MinIO, Wasabi, Selectel). Создай бакет и ключи в панели провайдера, затем заполни поля ниже.',
+        s3RegionPh: 'my-region',
         s3Endpoint: 'Endpoint URL',
         s3EndpointPh: 'https://s3.storage.example.com',
         s3AddressingStyle: 'Addressing style',
@@ -2281,6 +2283,7 @@
         const a = state.aws_defaults || {};
         const vendor = defaultS3Vendor(a);
         const otherDefaults = vendor === 'other' ? a : {};
+        const suggestedBucket = a.aws_storage_bucket_name || suggestBucketFromDomain(state.domain || state?.defaults?.domain || '');
         const setupMode = defaultAwsSetupMode(a);
         formEl.innerHTML = `
           <div class="env-form aws-form-root" id="aws-form-root">
@@ -2340,7 +2343,7 @@
                         `<option value="${r}" ${(a.aws_s3_region_name || 'eu-north-1') === r ? 'selected' : ''}>${r}</option>`).join('')}
                     </select>
                   </label>
-                  <label>${t('awsBucket')}<input type="text" id="aws_storage_bucket_name" autocomplete="off" value="${esc(a.aws_storage_bucket_name || '')}" placeholder="rmbl-myserver-prod"></label>
+                  <label>${t('awsBucket')}<input type="text" id="aws_storage_bucket_name" autocomplete="off" value="${esc(a.aws_storage_bucket_name || suggestedBucket)}" placeholder="${esc(suggestedBucket || 'rmbl-myserver-prod')}"></label>
                 </div>
                 <div class="actions ${setupMode !== 'auto' ? 'hidden' : ''}" id="aws-flow-auto-actions" style="margin:16px 0 0">
                   <button type="button" class="btn primary" id="aws-provision-btn">${t('awsProvision')}</button>
@@ -2366,8 +2369,8 @@
                 <p class="env-section-lead">${t('s3OtherDesc')}</p>
                 <div class="form-grid">
                   <label>${t('s3Endpoint')}<input type="url" id="s3_other_endpoint" autocomplete="off" value="${esc(otherDefaults.aws_s3_endpoint_url || '')}" placeholder="${esc(t('s3EndpointPh'))}"></label>
-                  <label>${t('awsRegion')}<input type="text" id="s3_other_region" autocomplete="off" value="${esc(otherDefaults.aws_s3_region_name || '')}" placeholder="ru-1"></label>
-                  <label>${t('awsBucket')}<input type="text" id="s3_other_bucket" autocomplete="off" value="${esc(otherDefaults.aws_storage_bucket_name || '')}" placeholder="rmbl-myserver-prod"></label>
+                  <label>${t('awsRegion')}<input type="text" id="s3_other_region" autocomplete="off" value="${esc(otherDefaults.aws_s3_region_name || '')}" placeholder="${esc(t('s3RegionPh'))}"></label>
+                  <label>${t('awsBucket')}<input type="text" id="s3_other_bucket" autocomplete="off" value="${esc(otherDefaults.aws_storage_bucket_name || suggestedBucket)}" placeholder="${esc(suggestedBucket || 'rmbl-myserver-prod')}"></label>
                   <label>${t('awsAccessKey')}<input type="text" id="s3_other_access_key" autocomplete="off" value="${esc(otherDefaults.aws_access_key_id || '')}"></label>
                   <label>${t('awsSecretKey')}<input type="text" id="s3_other_secret" autocomplete="off" value="${esc(otherDefaults.aws_secret_access_key || '')}"></label>
                   <label>${t('s3AddressingStyle')}
@@ -2451,6 +2454,11 @@
       }
     }
 
+    function suggestBucketFromDomain(domain) {
+      const slug = (domain || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+      return slug ? `rmbl-${slug}` : '';
+    }
+
     function s3Vendor() {
       return document.querySelector('input[name="s3_vendor"]:checked')?.value || 'aws';
     }
@@ -2497,10 +2505,14 @@
           formEl.querySelector('#aws-vendor-aws-wrap').classList.toggle('hidden', other);
           formEl.querySelector('#aws-vendor-other-wrap').classList.toggle('hidden', !other);
           if (other && state?.aws_defaults?.s3_vendor !== 'other') {
-            ['s3_other_endpoint', 's3_other_region', 's3_other_bucket', 's3_other_access_key', 's3_other_secret'].forEach(id => {
+            ['s3_other_endpoint', 's3_other_region', 's3_other_access_key', 's3_other_secret'].forEach(id => {
               const el = document.getElementById(id);
               if (el) el.value = '';
             });
+            const bucket = document.getElementById('s3_other_bucket');
+            if (bucket) {
+              bucket.value = suggestBucketFromDomain(state?.domain || state?.defaults?.domain || '');
+            }
           }
           if (currentStepId === 'aws') {
             const step = state?.steps?.find(s => s.id === 'aws');

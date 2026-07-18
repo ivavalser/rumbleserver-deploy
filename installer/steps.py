@@ -815,15 +815,17 @@ def _default_aws_payload(ctx: InstallerContext) -> dict[str, Any]:
     }
 
     if vendor == "other":
+        suggested_bucket = ctx.get("aws_storage_bucket_name") or (f"rmbl-{slug}" if slug else "")
         if saved_vendor == "other":
             endpoint = ctx.get("aws_s3_endpoint_url") or ""
             if _is_aws_endpoint(endpoint):
                 endpoint = ""
+            bucket = ctx.get("aws_storage_bucket_name") or suggested_bucket
             return {
                 **base,
                 "aws_access_key_id": ctx.get("aws_access_key_id") or "",
                 "aws_secret_access_key": ctx.get("aws_secret_access_key") or "",
-                "aws_storage_bucket_name": ctx.get("aws_storage_bucket_name") or "",
+                "aws_storage_bucket_name": bucket,
                 "aws_s3_region_name": ctx.get("aws_s3_region_name") or "",
                 "aws_s3_endpoint_url": endpoint,
             }
@@ -831,7 +833,7 @@ def _default_aws_payload(ctx: InstallerContext) -> dict[str, Any]:
             **base,
             "aws_access_key_id": "",
             "aws_secret_access_key": "",
-            "aws_storage_bucket_name": "",
+            "aws_storage_bucket_name": suggested_bucket,
             "aws_s3_region_name": "",
             "aws_s3_endpoint_url": "",
         }
