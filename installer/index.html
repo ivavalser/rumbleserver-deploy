@@ -524,7 +524,7 @@
           <div class="hero-mascot-glow"></div>
           <figure class="hero-mascot-figure">
             <img src="/assets/mascot-3-chat-dark.svg" alt="" class="hero-mascot-img">
-            <span class="hero-mascot-bubble" id="start-bubble">Let's rumble!</span>
+            <span class="hero-mascot-bubble" id="start-bubble">Let's go!</span>
           </figure>
         </div>
       </div>
@@ -635,14 +635,14 @@
         loadingBusy: 'A step is still running on the server',
         loadingBusyDesc: 'The installer is busy — waiting for it to finish. The page will refresh automatically.',
         loadingRetry: 'Cannot reach the installer — retrying…',
-        mascotSays: 'Rumble says',
+        mascotSays: 'RMBL says',
         modeAuto: 'Auto mode',
         modeManual: 'Step-by-step',
         modePause: 'Pause auto',
         modeResume: 'Resume auto',
         startHeadline: "Let's set up\nyour server",
         startSub: 'This wizard will configure your RMBL Chat server in about 10 minutes. Pick how you want to proceed.',
-        startBubble: "Let's rumble!",
+        startBubble: "Let's go!",
         startAutoTag: 'Recommended',
         startAutoTitle: 'Automatic installation',
         startAutoDesc: 'Steps that need no input run on their own. The wizard pauses only where your credentials or domain are required.',
@@ -716,7 +716,7 @@
         envSectionMode: 'Setup mode',
         envSectionDomain: 'Domain and DNS',
         envSectionDatabase: 'Database and Redis',
-        awsStepHelp: 'Rumble stores uploaded files in a private S3 bucket with a dedicated IAM user.',
+        awsStepHelp: 'RMBL stores uploaded files in a private S3 bucket with a dedicated IAM user.',
         awsSectionMode: 'Setup method',
         awsAuto: 'Automatic (recommended)',
         awsManual: 'Manual in AWS Console',
@@ -845,7 +845,7 @@
         loadingBusy: 'На сервере ещё выполняется шаг',
         loadingBusyDesc: 'Ждём завершения — страница обновится сама.',
         loadingRetry: 'Не удалось подключиться — повторяем…',
-        mascotSays: 'Rumble говорит',
+        mascotSays: 'RMBL говорит',
         modeAuto: 'Авто',
         modeManual: 'Пошагово',
         modePause: 'Пауза',
@@ -926,7 +926,7 @@
         envSectionMode: 'Режим настройки',
         envSectionDomain: 'Домен и DNS',
         envSectionDatabase: 'База данных и Redis',
-        awsStepHelp: 'Rumble хранит загруженные файлы в закрытом S3-бакете с отдельным IAM-пользователем.',
+        awsStepHelp: 'RMBL хранит загруженные файлы в закрытом S3-бакете с отдельным IAM-пользователем.',
         awsSectionMode: 'Способ настройки',
         awsAuto: 'Автоматически (рекомендуется)',
         awsManual: 'Вручную в консоли AWS',
@@ -2280,6 +2280,7 @@
         formEl.classList.remove('hidden');
         const a = state.aws_defaults || {};
         const vendor = defaultS3Vendor(a);
+        const otherDefaults = vendor === 'other' ? a : {};
         const setupMode = defaultAwsSetupMode(a);
         formEl.innerHTML = `
           <div class="env-form aws-form-root" id="aws-form-root">
@@ -2339,7 +2340,7 @@
                         `<option value="${r}" ${(a.aws_s3_region_name || 'eu-north-1') === r ? 'selected' : ''}>${r}</option>`).join('')}
                     </select>
                   </label>
-                  <label>${t('awsBucket')}<input type="text" id="aws_storage_bucket_name" autocomplete="off" value="${esc(a.aws_storage_bucket_name || '')}" placeholder="rumble-myserver-prod"></label>
+                  <label>${t('awsBucket')}<input type="text" id="aws_storage_bucket_name" autocomplete="off" value="${esc(a.aws_storage_bucket_name || '')}" placeholder="rmbl-myserver-prod"></label>
                 </div>
                 <div class="actions ${setupMode !== 'auto' ? 'hidden' : ''}" id="aws-flow-auto-actions" style="margin:16px 0 0">
                   <button type="button" class="btn primary" id="aws-provision-btn">${t('awsProvision')}</button>
@@ -2364,11 +2365,11 @@
               <section class="env-section">
                 <p class="env-section-lead">${t('s3OtherDesc')}</p>
                 <div class="form-grid">
-                  <label>${t('s3Endpoint')}<input type="url" id="s3_other_endpoint" autocomplete="off" value="${esc(a.aws_s3_endpoint_url || '')}" placeholder="${esc(t('s3EndpointPh'))}"></label>
-                  <label>${t('awsRegion')}<input type="text" id="s3_other_region" autocomplete="off" value="${esc(a.aws_s3_region_name || '')}" placeholder="ru-1"></label>
-                  <label>${t('awsBucket')}<input type="text" id="s3_other_bucket" autocomplete="off" value="${esc(a.aws_storage_bucket_name || '')}" placeholder="rumble-myserver-prod"></label>
-                  <label>${t('awsAccessKey')}<input type="text" id="s3_other_access_key" autocomplete="off" value="${esc(a.aws_access_key_id || '')}"></label>
-                  <label>${t('awsSecretKey')}<input type="text" id="s3_other_secret" autocomplete="off" value="${esc(a.aws_secret_access_key || '')}"></label>
+                  <label>${t('s3Endpoint')}<input type="url" id="s3_other_endpoint" autocomplete="off" value="${esc(otherDefaults.aws_s3_endpoint_url || '')}" placeholder="${esc(t('s3EndpointPh'))}"></label>
+                  <label>${t('awsRegion')}<input type="text" id="s3_other_region" autocomplete="off" value="${esc(otherDefaults.aws_s3_region_name || '')}" placeholder="ru-1"></label>
+                  <label>${t('awsBucket')}<input type="text" id="s3_other_bucket" autocomplete="off" value="${esc(otherDefaults.aws_storage_bucket_name || '')}" placeholder="rmbl-myserver-prod"></label>
+                  <label>${t('awsAccessKey')}<input type="text" id="s3_other_access_key" autocomplete="off" value="${esc(otherDefaults.aws_access_key_id || '')}"></label>
+                  <label>${t('awsSecretKey')}<input type="text" id="s3_other_secret" autocomplete="off" value="${esc(otherDefaults.aws_secret_access_key || '')}"></label>
                   <label>${t('s3AddressingStyle')}
                     <select id="s3_addressing_style">
                       ${['auto','path','virtual'].map(v =>
@@ -2456,8 +2457,6 @@
 
     function defaultS3Vendor(a) {
       if (a?.s3_vendor === 'other' || a?.s3_vendor === 'aws') return a.s3_vendor;
-      const endpoint = (a?.aws_s3_endpoint_url || '').toLowerCase();
-      if (endpoint && !endpoint.includes('amazonaws.com')) return 'other';
       return 'aws';
     }
 
@@ -2497,6 +2496,12 @@
           const other = s3Vendor() === 'other';
           formEl.querySelector('#aws-vendor-aws-wrap').classList.toggle('hidden', other);
           formEl.querySelector('#aws-vendor-other-wrap').classList.toggle('hidden', !other);
+          if (other && state?.aws_defaults?.s3_vendor !== 'other') {
+            ['s3_other_endpoint', 's3_other_region', 's3_other_bucket', 's3_other_access_key', 's3_other_secret'].forEach(id => {
+              const el = document.getElementById(id);
+              if (el) el.value = '';
+            });
+          }
           if (currentStepId === 'aws') {
             const step = state?.steps?.find(s => s.id === 'aws');
             if (step) renderActions(step);

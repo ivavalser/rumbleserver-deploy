@@ -93,7 +93,7 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-echo "🚀 Rumble Server — web installer"
+echo "🚀 RMBL Server — web installer"
 
 if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
     echo "🔄 Installer already running — stopping to apply updates (progress is kept)..."
