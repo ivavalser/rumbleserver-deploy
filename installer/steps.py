@@ -135,6 +135,7 @@ class InstallerContext:
         env: dict[str, str] | None = None,
         check: bool = True,
         input_text: str | None = None,
+        timeout: float | None = None,
     ) -> subprocess.CompletedProcess[str]:
         if isinstance(cmd, str):
             display = cmd
@@ -156,6 +157,7 @@ class InstallerContext:
             text=True,
             capture_output=True,
             shell=shell,
+            timeout=timeout,
         )
         if proc.stdout:
             for line in proc.stdout.rstrip("\n").split("\n"):
@@ -683,21 +685,26 @@ def verify_s3_in_docker(
     for key, value in env_overrides.items():
         docker_env.extend(["-e", f"{key}={value}"])
 
-    ctx.log("$ docker run ... python s3_docker_check.py")
-    proc = ctx.run(
-        [
-            "docker",
-            "run",
-            "--rm",
-            *docker_env,
-            "-v",
-            f"{check_script}:/tmp/s3_docker_check.py:ro",
-            f"{GHCR_REGISTRY}/{image}",
-            "python",
-            "/tmp/s3_docker_check.py",
-        ],
-        check=False,
-    )
+    ctx.log("$ docker run --entrypoint python ... /tmp/s3_docker_check.py")
+    try:
+        proc = ctx.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "--entrypoint",
+                "python",
+                *docker_env,
+                "-v",
+                f"{check_script}:/tmp/s3_docker_check.py:ro",
+                f"{GHCR_REGISTRY}/{image}",
+                "/tmp/s3_docker_check.py",
+            ],
+            check=False,
+            timeout=120,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("S3 check timed out after 120s — check network access to S3 from this server.") from exc
     stdout = (proc.stdout or "").strip()
     if proc.returncode != 0 and not stdout:
         detail = (proc.stderr or proc.stdout or "").strip()

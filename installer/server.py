@@ -17,7 +17,7 @@ from urllib.parse import parse_qs, urlparse
 
 INSTALL_DIR = Path(os.environ.get("RUMBLE_INSTALL_DIR", Path(__file__).resolve().parent.parent))
 ASSETS_DIR = INSTALL_DIR / "installer" / "assets"
-ALLOWED_ASSET_EXTENSIONS = {".svg"}
+ALLOWED_ASSET_EXTENSIONS = {".svg", ".png", ".ico"}
 sys.path.insert(0, str(INSTALL_DIR / "installer"))
 
 from steps import (  # noqa: E402
@@ -128,7 +128,11 @@ class InstallerHandler(BaseHTTPRequestHandler):
         if path.suffix.lower() not in ALLOWED_ASSET_EXTENSIONS:
             self.send_error(HTTPStatus.FORBIDDEN)
             return
-        content_types = {".svg": "image/svg+xml"}
+        content_types = {
+            ".svg": "image/svg+xml",
+            ".png": "image/png",
+            ".ico": "image/x-icon",
+        }
         self._file_response(path, content_types.get(path.suffix.lower(), "application/octet-stream"))
 
     def do_GET(self) -> None:
@@ -145,6 +149,10 @@ class InstallerHandler(BaseHTTPRequestHandler):
 
         if path.startswith("/assets/"):
             self._serve_asset(path[len("/assets/"):])
+            return
+
+        if path == "/favicon.ico":
+            self._serve_asset("favicon.ico")
             return
 
         if path == "/api/state":

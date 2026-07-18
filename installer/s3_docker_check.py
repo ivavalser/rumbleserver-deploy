@@ -69,12 +69,16 @@ def main() -> None:
     if not bucket:
         fail("Bucket name is required.", retryable=False)
 
-    config_kwargs: dict = {}
+    config_kwargs: dict = {
+        "connect_timeout": 10,
+        "read_timeout": 30,
+        "retries": {"max_attempts": 2},
+    }
     if addressing and addressing != "auto":
         config_kwargs["s3"] = {"addressing_style": addressing}
     if sig:
         config_kwargs["signature_version"] = sig
-    config = Config(**config_kwargs) if config_kwargs else None
+    config = Config(**config_kwargs)
 
     session = boto3.Session(
         aws_access_key_id=access_key,
@@ -84,7 +88,7 @@ def main() -> None:
 
     if vendor == "aws":
         try:
-            identity = session.client("sts").get_caller_identity()
+            identity = session.client("sts", config=config).get_caller_identity()
             checks.append(
                 {
                     "label": f"Credentials valid (account {identity.get('Account', '?')})",
@@ -100,8 +104,7 @@ def main() -> None:
         kwargs: dict = {"region_name": region_name}
         if endpoint:
             kwargs["endpoint_url"] = endpoint
-        if config:
-            kwargs["config"] = config
+        kwargs["config"] = config
         return session.client("s3", **kwargs)
 
     s3 = s3_client(region)
