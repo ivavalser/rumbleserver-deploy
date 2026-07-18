@@ -56,13 +56,17 @@ class InstallerContext:
         if not self.env_path.exists():
             return
         text = self.env_path.read_text(encoding="utf-8")
+        s3_key_pairs = (
+            (("S3_ACCESS_KEY_ID", "AWS_ACCESS_KEY_ID"), "aws_access_key_id"),
+            (("S3_SECRET_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY"), "aws_secret_access_key"),
+            (("S3_BUCKET_NAME", "AWS_STORAGE_BUCKET_NAME"), "aws_storage_bucket_name"),
+            (("S3_REGION_NAME", "AWS_S3_REGION_NAME"), "aws_s3_region_name"),
+            (("S3_ENDPOINT_URL", "AWS_S3_ENDPOINT_URL"), "aws_s3_endpoint_url"),
+            (("S3_ADDRESSING_STYLE",), "s3_addressing_style"),
+            (("S3_SIGNATURE_VERSION",), "s3_signature_version"),
+        )
         env_keys = {
             "ALLOWED_HOSTS": "allowed_hosts",
-            "AWS_ACCESS_KEY_ID": "aws_access_key_id",
-            "AWS_SECRET_ACCESS_KEY": "aws_secret_access_key",
-            "AWS_STORAGE_BUCKET_NAME": "aws_storage_bucket_name",
-            "AWS_S3_REGION_NAME": "aws_s3_region_name",
-            "AWS_S3_ENDPOINT_URL": "aws_s3_endpoint_url",
             "DB_PASS": "db_pass",
             "DB_NAME": "db_name",
             "DB_USER": "db_user",
@@ -74,10 +78,19 @@ class InstallerContext:
             "SECRET_KEY": "secret_key",
         }
         updates: dict[str, Any] = {}
+        for keys, ctx_key in s3_key_pairs:
+            val = _env_value_any(text, keys)
+            if val and not self.get(ctx_key):
+                updates[ctx_key] = val
         for env_key, ctx_key in env_keys.items():
             val = _env_value(text, env_key)
             if val and not self.get(ctx_key):
                 updates[ctx_key] = val
+        endpoint = updates.get("aws_s3_endpoint_url") or self.get("aws_s3_endpoint_url") or _env_value_any(
+            text, ("S3_ENDPOINT_URL", "AWS_S3_ENDPOINT_URL")
+        )
+        if endpoint and not self.get("s3_vendor"):
+            updates["s3_vendor"] = _infer_s3_vendor(endpoint)
         allowed = updates.get("allowed_hosts") or self.get("allowed_hosts") or _env_value(
             text, "ALLOWED_HOSTS"
         )
@@ -368,52 +381,6 @@ def apply_docker(ctx: InstallerContext, _payload: dict[str, Any]) -> StepResult:
     return check_docker(ctx)
 
 
-def check_awscli(ctx: InstallerContext) -> StepResult:
-    from aws_setup import _needs_official_aws_cli_v2, find_aws_cli
-
-    path = find_aws_cli()
-    if not path:
-        return _fail(
-            "AWS CLI is not installed yet.",
-            manual="Click «Run automatically» — installs official AWS CLI v2 and boto3.",
-            cwd="/",
-        )
-    if _needs_official_aws_cli_v2(path):
-        return _fail(
-            "AWS CLI uses Python 3.14 (broken on many S3 commands).",
-            manual="Click «Run automatically» — installer will install official AWS CLI v2.",
-            cwd="/",
-        )
-    try:
-        import boto3  # noqa: PLC0415
-    except ImportError:
-        return _fail(
-            "boto3 is not installed (needed for S3 access checks).",
-            manual="Click «Run automatically».",
-            cwd="/",
-        )
-    version = ctx.run([path, "--version"], check=False)
-    if version.returncode != 0:
-        return _fail(
-            "AWS CLI is present but not working.",
-            manual=f"{path} --version",
-            cwd="/",
-        )
-    return _ok(f"{version.stdout.strip() or path}; boto3 ready")
-
-
-def apply_awscli(ctx: InstallerContext, _payload: dict[str, Any]) -> StepResult:
-    from aws_setup import ensure_aws_runtime
-
-    try:
-        path, _boto3 = ensure_aws_runtime(ctx.log)
-    except RuntimeError as exc:
-        return _fail(str(exc), cwd="/")
-    version = ctx.run([path, "--version"], check=False)
-    line = version.stdout.strip() or f"AWS CLI installed: {path}"
-    return _ok(f"{line}; boto3 ready")
-
-
 GHCR_REGISTRY = "ghcr.io"
 GHCR_IMAGE = "ivavalser/rumbleserver"
 GHCR_DEFAULT_USER = "rmbldeploy"
@@ -656,6 +623,98 @@ def _endpoint_for_region(region: str) -> str:
     return f"https://s3.{region}.amazonaws.com"
 
 
+def _infer_s3_vendor(endpoint: str) -> str:
+    endpoint = (endpoint or "").lower()
+    if not endpoint or "amazonaws.com" in endpoint:
+        return "aws"
+    return "other"
+
+
+def _ghcr_image_ref(ctx: InstallerContext) -> str:
+    tag = (ctx.get("version") or "stable").strip() or "stable"
+    return f"{GHCR_IMAGE}:{tag}"
+
+
+def verify_s3_in_docker(
+    ctx: InstallerContext,
+    *,
+    access_key_id: str,
+    secret_access_key: str,
+    region: str,
+    bucket: str,
+    endpoint_url: str,
+    vendor: str = "aws",
+    addressing_style: str = "",
+    signature_version: str = "",
+) -> dict[str, Any]:
+    """Pull app image and verify S3 access inside the container (boto3 from image)."""
+    if not access_key_id or not secret_access_key:
+        raise ValueError("S3 access key and secret are required.")
+    if not bucket:
+        raise ValueError("Bucket name is required.")
+    if vendor == "other" and not (endpoint_url or "").strip():
+        raise ValueError("S3 endpoint URL is required for non-AWS providers.")
+
+    if not shutil.which("docker"):
+        raise RuntimeError("Docker is not installed — complete the Docker step first.")
+
+    image = _ghcr_image_ref(ctx)
+    check_script = ctx.install_dir / "installer" / "s3_docker_check.py"
+    if not check_script.is_file():
+        raise RuntimeError(f"S3 check script not found: {check_script}")
+
+    ctx.log(f"Pulling {GHCR_REGISTRY}/{image} for S3 access check...")
+    pull = ctx.run(["docker", "pull", f"{GHCR_REGISTRY}/{image}"], check=False)
+    if pull.returncode != 0:
+        detail = (pull.stderr or pull.stdout or "").strip()
+        raise RuntimeError(f"Failed to pull Docker image for S3 check: {detail}")
+
+    env_overrides = {
+        "S3_ACCESS_KEY_ID": access_key_id,
+        "S3_SECRET_ACCESS_KEY": secret_access_key,
+        "S3_BUCKET_NAME": bucket,
+        "S3_REGION_NAME": region,
+        "S3_ENDPOINT_URL": endpoint_url or "",
+        "S3_ADDRESSING_STYLE": addressing_style or "auto",
+        "S3_SIGNATURE_VERSION": signature_version or "s3v4",
+        "INSTALLER_S3_VENDOR": vendor,
+    }
+    docker_env: list[str] = []
+    for key, value in env_overrides.items():
+        docker_env.extend(["-e", f"{key}={value}"])
+
+    ctx.log("$ docker run ... python s3_docker_check.py")
+    proc = ctx.run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            *docker_env,
+            "-v",
+            f"{check_script}:/tmp/s3_docker_check.py:ro",
+            f"{GHCR_REGISTRY}/{image}",
+            "python",
+            "/tmp/s3_docker_check.py",
+        ],
+        check=False,
+    )
+    stdout = (proc.stdout or "").strip()
+    if proc.returncode != 0 and not stdout:
+        detail = (proc.stderr or proc.stdout or "").strip()
+        raise RuntimeError(f"S3 check container failed: {detail}")
+
+    try:
+        last_line = stdout.splitlines()[-1] if stdout else ""
+        result = json.loads(last_line)
+    except (json.JSONDecodeError, IndexError) as exc:
+        detail = (proc.stderr or stdout or "").strip()
+        raise RuntimeError(f"S3 check returned invalid JSON: {detail}") from exc
+
+    if not isinstance(result, dict):
+        raise RuntimeError("S3 check returned unexpected payload.")
+    return result
+
+
 def _domain_from_allowed_hosts(allowed: str) -> str:
     for part in allowed.split(","):
         host = part.strip()
@@ -690,23 +749,36 @@ def _env_value(text: str, key: str) -> str:
     return ""
 
 
+def _env_value_any(text: str, keys: tuple[str, ...]) -> str:
+    for key in keys:
+        val = _env_value(text, key)
+        if val:
+            return val
+    return ""
+
+
 def _aws_configured(text: str) -> bool:
     placeholders = (
         "your_aws_access_key",
+        "your_s3_access_key",
+        "your_s3_access_key_id",
         "your-bucket-name",
         "your_aws_secret",
+        "your_s3_secret",
+        "your_s3_secret_access_key",
         "change_this",
     )
     if any(p in text for p in placeholders):
         return False
-    for key in (
-        "AWS_ACCESS_KEY_ID",
-        "AWS_SECRET_ACCESS_KEY",
-        "AWS_STORAGE_BUCKET_NAME",
-        "AWS_S3_REGION_NAME",
-        "AWS_S3_ENDPOINT_URL",
-    ):
-        if not _env_value(text, key):
+    required = (
+        ("S3_ACCESS_KEY_ID", "AWS_ACCESS_KEY_ID"),
+        ("S3_SECRET_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY"),
+        ("S3_BUCKET_NAME", "AWS_STORAGE_BUCKET_NAME"),
+        ("S3_REGION_NAME", "AWS_S3_REGION_NAME"),
+        ("S3_ENDPOINT_URL", "AWS_S3_ENDPOINT_URL"),
+    )
+    for keys in required:
+        if not _env_value_any(text, keys):
             return False
     return True
 
@@ -726,16 +798,22 @@ def _aws_apply_statuses(ctx: InstallerContext) -> list[dict[str, Any]]:
 
 def _default_aws_payload(ctx: InstallerContext) -> dict[str, Any]:
     domain = ctx.get("domain") or ""
+    vendor = ctx.get("s3_vendor") or "aws"
     region = ctx.get("aws_s3_region_name") or "eu-north-1"
     slug = re.sub(r"[^a-z0-9]+", "-", domain.lower()).strip("-")[:40]
     suggested_bucket = ctx.get("aws_storage_bucket_name") or (f"rumble-{slug}" if slug else "")
+    endpoint = ctx.get("aws_s3_endpoint_url") or ""
+    if vendor == "aws" and not endpoint:
+        endpoint = _endpoint_for_region(region)
     return {
+        "s3_vendor": vendor,
         "aws_access_key_id": ctx.get("aws_access_key_id") or "",
         "aws_secret_access_key": ctx.get("aws_secret_access_key") or "",
         "aws_storage_bucket_name": suggested_bucket,
         "aws_s3_region_name": region,
-        "aws_s3_endpoint_url": ctx.get("aws_s3_endpoint_url")
-        or _endpoint_for_region(region),
+        "aws_s3_endpoint_url": endpoint,
+        "s3_addressing_style": ctx.get("s3_addressing_style") or "auto",
+        "s3_signature_version": ctx.get("s3_signature_version") or "s3v4",
         "aws_bootstrap_access_key_id": ctx.get("aws_bootstrap_access_key_id") or "",
         "aws_bootstrap_secret_access_key": ctx.get("aws_bootstrap_secret_access_key") or "",
     }
@@ -751,6 +829,9 @@ def check_aws_access(
     payload: dict[str, Any] | None = None,
 ) -> StepResult:
     data = payload or {}
+    vendor = (data.get("s3_vendor") or ctx.get("s3_vendor") or "aws").strip().lower()
+    if vendor not in ("aws", "other"):
+        vendor = "aws"
     access_key = (
         data.get("aws_access_key_id") or ctx.get("aws_access_key_id") or ""
     ).strip()
@@ -763,37 +844,48 @@ def check_aws_access(
     bucket = (
         data.get("aws_storage_bucket_name") or ctx.get("aws_storage_bucket_name") or ""
     ).strip()
+    endpoint = (
+        data.get("aws_s3_endpoint_url") or ctx.get("aws_s3_endpoint_url") or ""
+    ).strip()
+    addressing_style = (
+        data.get("s3_addressing_style") or ctx.get("s3_addressing_style") or "auto"
+    ).strip()
+    signature_version = (
+        data.get("s3_signature_version") or ctx.get("s3_signature_version") or "s3v4"
+    ).strip()
 
     if not access_key or not secret:
-        return _fail("Enter the app AWS access key and secret first.")
+        return _fail("Enter the S3 access key and secret first.")
     if not bucket:
         return _fail("Enter the S3 bucket name first.")
-
-    from aws_setup import ensure_aws_runtime, verify_s3_access
-
-    try:
-        ensure_aws_runtime(ctx.log)
-    except RuntimeError as exc:
-        return _fail(str(exc))
+    if vendor == "other" and not endpoint:
+        return _fail("Enter the S3 endpoint URL for your provider.")
+    if vendor == "aws" and not endpoint:
+        endpoint = _endpoint_for_region(region)
 
     try:
-        result = verify_s3_access(
+        result = verify_s3_in_docker(
+            ctx,
             access_key_id=access_key,
             secret_access_key=secret,
             region=region,
             bucket=bucket,
-            log=ctx.log,
+            endpoint_url=endpoint,
+            vendor=vendor,
+            addressing_style=addressing_style,
+            signature_version=signature_version,
         )
     except Exception as exc:
         return _fail(str(exc))
 
-    if result["ok"]:
+    if result.get("ok"):
         ctx.set("aws_verified", True)
+        ctx.set("s3_vendor", vendor)
         return StepResult(
             ok=True,
-            message=result["message"],
+            message=result.get("message", "S3 access verified."),
             data={
-                "checks": result["checks"],
+                "checks": result.get("checks", []),
                 "retryable": result.get("retryable", True),
                 "bucket_region": result.get("bucket_region"),
             },
@@ -801,7 +893,7 @@ def check_aws_access(
     ctx.set("aws_verified", False)
     return StepResult(
         ok=False,
-        message=result["message"],
+        message=result.get("message", "S3 access check failed."),
         manual=result.get("manual", ""),
         data={
             "checks": result.get("checks", []),
@@ -896,6 +988,24 @@ def _write_env_file(ctx: InstallerContext, payload: dict[str, Any]) -> None:
     aws_key = (payload.get("aws_access_key_id") or ctx.get("aws_access_key_id") or "").strip()
     aws_secret = (payload.get("aws_secret_access_key") or ctx.get("aws_secret_access_key") or "").strip()
     aws_bucket = (payload.get("aws_storage_bucket_name") or ctx.get("aws_storage_bucket_name") or "").strip()
+    addressing_style = (
+        payload.get("s3_addressing_style") or ctx.get("s3_addressing_style") or ""
+    ).strip()
+    signature_version = (
+        payload.get("s3_signature_version") or ctx.get("s3_signature_version") or ""
+    ).strip()
+
+    s3_lines = [
+        f"S3_ACCESS_KEY_ID={aws_key}",
+        f"S3_SECRET_ACCESS_KEY={aws_secret}",
+        f"S3_BUCKET_NAME={aws_bucket}",
+        f"S3_REGION_NAME={region}",
+        f"S3_ENDPOINT_URL={endpoint}",
+    ]
+    if addressing_style:
+        s3_lines.append(f"S3_ADDRESSING_STYLE={addressing_style}")
+    if signature_version:
+        s3_lines.append(f"S3_SIGNATURE_VERSION={signature_version}")
 
     lines = [
         "# Generated by Rumble Server installer",
@@ -914,11 +1024,7 @@ def _write_env_file(ctx: InstallerContext, payload: dict[str, Any]) -> None:
         f"REDIS_PASSWORD={redis_password}",
         f"REDIS_URL={redis_url}",
         "",
-        f"AWS_ACCESS_KEY_ID={aws_key}",
-        f"AWS_SECRET_ACCESS_KEY={aws_secret}",
-        f"AWS_STORAGE_BUCKET_NAME={aws_bucket}",
-        f"AWS_S3_REGION_NAME={region}",
-        f"AWS_S3_ENDPOINT_URL={endpoint}",
+        *s3_lines,
         "",
     ]
     ctx.env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -945,6 +1051,9 @@ def _write_env_file(ctx: InstallerContext, payload: dict[str, Any]) -> None:
             "aws_storage_bucket_name": aws_bucket,
             "aws_s3_region_name": region,
             "aws_s3_endpoint_url": endpoint,
+            "s3_addressing_style": addressing_style,
+            "s3_signature_version": signature_version,
+            "s3_vendor": ctx.get("s3_vendor") or "aws",
         }
     )
     _write_compose_override(ctx, use_external_db, use_external_redis)
@@ -1059,14 +1168,16 @@ def check_aws(ctx: InstallerContext) -> StepResult:
     text = ctx.env_path.read_text(encoding="utf-8")
     if not _aws_configured(text):
         return _fail(
-            "AWS S3 is not configured yet.",
-            manual="Fill in bucket and app credentials, or use automatic provisioning.",
+            "S3 storage is not configured yet.",
+            manual="Fill in bucket and credentials, or use automatic AWS provisioning.",
         )
     if not ctx.get("aws_verified"):
         return _fail(
             'S3 access has not been verified yet — click "Check S3 access".',
         )
-    return _ok("AWS S3 is configured and verified.", defaults=_default_aws_payload(ctx))
+    vendor = ctx.get("s3_vendor") or "aws"
+    label = "AWS S3" if vendor == "aws" else "S3"
+    return _ok(f"{label} is configured and verified.", defaults=_default_aws_payload(ctx))
 
 
 def apply_aws(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
@@ -1075,6 +1186,11 @@ def apply_aws(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
 
     merged = _default_aws_payload(ctx)
     merged.update(payload)
+    vendor = (merged.get("s3_vendor") or "aws").strip().lower()
+    if vendor not in ("aws", "other"):
+        vendor = "aws"
+    merged["s3_vendor"] = vendor
+
     bootstrap_key = (payload.get("aws_bootstrap_access_key_id") or "").strip()
     bootstrap_secret = (payload.get("aws_bootstrap_secret_access_key") or "").strip()
     if bootstrap_key:
@@ -1083,9 +1199,20 @@ def apply_aws(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
         ctx.set("aws_bootstrap_secret_access_key", bootstrap_secret)
 
     if not (merged.get("aws_access_key_id") and merged.get("aws_secret_access_key")):
-        return _fail("AWS access key and secret are required.")
+        return _fail("S3 access key and secret are required.")
     if not merged.get("aws_storage_bucket_name"):
-        return _fail("AWS bucket name is required.")
+        return _fail("S3 bucket name is required.")
+
+    region = merged.get("aws_s3_region_name") or "eu-north-1"
+    endpoint = (merged.get("aws_s3_endpoint_url") or "").strip()
+    if vendor == "other":
+        if not endpoint:
+            return _fail("S3 endpoint URL is required for non-AWS providers.")
+    elif not endpoint:
+        endpoint = _endpoint_for_region(region)
+
+    addressing_style = (merged.get("s3_addressing_style") or "auto").strip()
+    signature_version = (merged.get("s3_signature_version") or "s3v4").strip()
 
     env_payload = _default_env_payload(ctx)
     env_payload.update(
@@ -1093,14 +1220,16 @@ def apply_aws(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
             "aws_access_key_id": merged["aws_access_key_id"],
             "aws_secret_access_key": merged["aws_secret_access_key"],
             "aws_storage_bucket_name": merged["aws_storage_bucket_name"],
-            "aws_s3_region_name": merged.get("aws_s3_region_name") or "eu-north-1",
-            "aws_s3_endpoint_url": merged.get("aws_s3_endpoint_url")
-            or _endpoint_for_region(merged.get("aws_s3_region_name") or "eu-north-1"),
+            "aws_s3_region_name": region,
+            "aws_s3_endpoint_url": endpoint,
+            "s3_addressing_style": addressing_style if vendor == "other" else "",
+            "s3_signature_version": signature_version if vendor == "other" else "",
         }
     )
     _write_env_file(ctx, env_payload)
+    ctx.set("s3_vendor", vendor)
 
-    verify = check_aws_access(ctx, merged)
+    verify = check_aws_access(ctx, {**merged, "aws_s3_endpoint_url": endpoint})
     statuses = _aws_apply_statuses(ctx)
     data: dict[str, Any] = {
         "defaults": _default_aws_payload(ctx),
@@ -1110,9 +1239,10 @@ def apply_aws(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
         data["checks"] = verify.data["checks"]
 
     if verify.ok:
+        label = "AWS" if vendor == "aws" else "S3"
         return StepResult(
             ok=True,
-            message="AWS configuration saved and verified.",
+            message=f"{label} configuration saved and verified.",
             data=data,
         )
     return StepResult(
@@ -1629,21 +1759,13 @@ STEPS: list[StepDef] = [
         skip_manual="Create .env with ALLOWED_HOSTS, DB/Redis credentials, and domain.",
     ),
     StepDef(
-        id="awscli",
-        title="AWS CLI",
-        description="Command-line tool for S3 setup",
-        check=check_awscli,
-        apply=apply_awscli,
-        skip_manual="apt-get update && apt-get install -y awscli",
-    ),
-    StepDef(
         id="aws",
-        title="AWS S3 storage",
-        description="Bucket, IAM user, file uploads",
+        title="S3 storage",
+        description="Bucket and object storage credentials",
         check=check_aws,
         apply=apply_aws,
         needs_form=True,
-        skip_manual="Configure AWS S3 in .env: bucket, region, IAM access keys.",
+        skip_manual="Configure S3 in .env: bucket, region, endpoint, access keys.",
     ),
     StepDef(
         id="deploy",

@@ -701,7 +701,6 @@
         busyDocker: 'Installing Docker — about a minute',
         busyGhcr: 'Logging in to registry',
         busyEnv: 'Saving configuration',
-        busyAwscli: 'Installing AWS CLI',
         busySuperuser: 'Creating admin account',
         busyDeploy: 'Deploying application',
         ghcrKey: 'GHCR key',
@@ -768,7 +767,16 @@
         envSimpleDesc: 'Auto-generate PostgreSQL & Redis passwords for Docker',
         envAdvanced: 'Advanced setup',
         envAdvancedDesc: 'Use external PostgreSQL / Redis with custom credentials',
-        awsTitle: 'AWS S3 (required)',
+        awsTitle: 'S3 storage (required)',
+        s3Vendor: 'Storage provider',
+        s3VendorAws: 'AWS',
+        s3VendorOther: 'Other (S3-compatible)',
+        s3OtherDesc: 'Connect to any S3-compatible provider (e.g. Selectel, MinIO, Wasabi). Create a bucket and access keys in your provider panel, then fill in the fields below.',
+        s3Endpoint: 'Endpoint URL',
+        s3EndpointPh: 'https://s3.storage.example.com',
+        s3AddressingStyle: 'Addressing style',
+        s3SignatureVersion: 'Signature version',
+        awsCheckingDocker: 'Pulling image & checking S3…',
         awsGuide: 'Open AWS setup guide',
         awsProvision: 'Create S3 bucket & IAM user',
         awsBootstrapKey: 'Bootstrap access key ID',
@@ -903,7 +911,6 @@
         busyDocker: 'Устанавливаем Docker — около минуты',
         busyGhcr: 'Авторизуемся в реестре образов',
         busyEnv: 'Сохраняем конфигурацию',
-        busyAwscli: 'Устанавливаем AWS CLI',
         busySuperuser: 'Создаём учётную запись администратора',
         busyDeploy: 'Разворачиваем приложение',
         ghcrKey: 'Ключ GHCR',
@@ -961,7 +968,16 @@
         envSimpleDesc: 'Пароли PostgreSQL и Redis генерируются автоматически для Docker',
         envAdvanced: 'Расширенная настройка',
         envAdvancedDesc: 'Внешние PostgreSQL и Redis со своими параметрами подключения',
-        awsTitle: 'AWS S3 (обязательно)',
+        awsTitle: 'S3-хранилище (обязательно)',
+        s3Vendor: 'Провайдер хранилища',
+        s3VendorAws: 'AWS',
+        s3VendorOther: 'Другой (S3-compatible)',
+        s3OtherDesc: 'Подключение к любому S3-совместимому провайдеру (например, Selectel, MinIO, Wasabi). Создай бакет и ключи в панели провайдера, затем заполни поля ниже.',
+        s3Endpoint: 'Endpoint URL',
+        s3EndpointPh: 'https://s3.storage.example.com',
+        s3AddressingStyle: 'Addressing style',
+        s3SignatureVersion: 'Signature version',
+        awsCheckingDocker: 'Скачиваем образ и проверяем S3…',
         awsGuide: 'Открыть инструкцию по AWS',
         awsProvision: 'Создать S3-бакет и IAM-пользователя',
         awsBootstrapKey: 'Bootstrap Access Key ID',
@@ -1022,8 +1038,7 @@
         docker: { title: 'Docker', desc: 'Engine and Compose plugin', pending: 'Install Docker Engine and the Compose plugin.', mascot: 'RMBL runs in Docker containers — database, cache, and app stay isolated and update with a single command, without messing up the host system.' },
         ghcr: { title: 'Container registry (GHCR)', desc: 'Access key from maintainer', pending: 'Log in to GHCR with the access key from the maintainer.', mascot: 'App images live in a private registry (GHCR). Paste the access key from your maintainer — I will log Docker in so it can pull the server image.' },
         env: { title: 'Server configuration (.env)', desc: 'Domain, DNS, database, Redis', pending: 'Specify the server domain, set up DNS (see below), then save configuration.', mascot: 'Here we create the server config: domain, secrets, database passwords. I generate the secrets — you only need to enter your domain and check DNS.' },
-        awscli: { title: 'AWS CLI', desc: 'Command-line tool for S3 setup', pending: 'Install AWS CLI — needed to create the S3 bucket and IAM user automatically.', mascot: 'AWS CLI lets me create an S3 bucket and IAM user automatically. One install now saves a lot of manual clicking in the AWS console later.' },
-        aws: { title: 'AWS S3 storage', desc: 'Bucket, IAM user, file uploads', pending: 'Configure S3 for file storage — create a bucket and IAM user, or use automatic setup.', mascot: 'Uploaded files go to a private S3 bucket. You can auto-provision with bootstrap keys or enter app credentials manually — either way I verify access before moving on.' },
+        aws: { title: 'S3 storage', desc: 'Bucket and object storage credentials', pending: 'Configure S3 for file storage — AWS with auto-provisioning or any S3-compatible provider.', mascot: 'Uploaded files go to a private S3 bucket. Choose AWS for automatic setup or another S3-compatible provider — access is verified inside the app Docker image before moving on.' },
         deploy: { title: 'Deploy application', desc: 'Pull images and start services', pending: 'Pull the container image and start the application.', mascot: 'Now the fun part: pull the image and start containers — database, Redis, web server, and background workers. This takes a minute or two.' },
         superuser: { title: 'Django Admin account', desc: 'First superuser', pending: 'Create the first Django Admin superuser account.', mascot: 'We create a Django Admin superuser — this is the internal server panel, not a messenger account. Pick a strong password and keep it safe.' },
         nginx: { title: 'Nginx and HTTPS', desc: 'Reverse proxy and Let\'s Encrypt', pending: 'Set up Nginx, obtain an HTTPS certificate, and connect your domain.', mascot: 'I install Nginx and get a free HTTPS certificate from Let\'s Encrypt. Without HTTPS browsers and apps will not trust your server.' },
@@ -1035,8 +1050,7 @@
         docker: { title: 'Docker', desc: 'Docker Engine и плагин Compose', pending: 'Устанавливаем Docker Engine и плагин Compose.', mascot: 'RMBL работает в контейнерах — база, кэш и приложение изолированы и обновляются одной командой, не засоряя систему.' },
         ghcr: { title: 'Реестр образов (GHCR)', desc: 'Ключ доступа от команды RMBL', pending: 'Входим в GHCR с ключом доступа от команды RMBL.', mascot: 'Образы приложения лежат в закрытом реестре GHCR. Вставь ключ от команды RMBL — я авторизую Docker, чтобы скачать образ сервера.' },
         env: { title: 'Конфигурация сервера (.env)', desc: 'Домен, DNS, база, Redis', pending: 'Укажи домен, настрой DNS (ниже) и сохрани конфигурацию.', mascot: 'Здесь задаём конфигурацию: домен, секреты, пароли. Секреты сгенерирую сам — тебе нужно указать домен и проверить DNS.' },
-        awscli: { title: 'AWS CLI', desc: 'Утилита для настройки S3', pending: 'Устанавливаем AWS CLI — нужен для автоматического создания бакета и IAM-пользователя.', mascot: 'AWS CLI позволяет автоматически создать S3-бакет и IAM-пользователя. Один раз поставим сейчас — потом меньше кликов в консоли AWS.' },
-        aws: { title: 'Хранилище AWS S3', desc: 'Бакет, IAM, загрузка файлов', pending: 'Настрой S3 для хранения файлов — создай бакет и IAM-пользователя или воспользуйся автоматической настройкой.', mascot: 'Загруженные файлы хранятся в закрытом S3-бакете. Можно настроить автоматически с bootstrap-ключами или ввести ключи приложения вручную — в любом случае проверю доступ.' },
+        aws: { title: 'S3-хранилище', desc: 'Бакет и ключи доступа', pending: 'Настрой S3 для файлов — AWS с автопровижинингом или любой S3-compatible провайдер.', mascot: 'Файлы хранятся в закрытом S3-бакете. Выбери AWS для автоматической настройки или другого S3-провайдера — доступ проверяется внутри Docker-образа приложения.' },
         deploy: { title: 'Развёртывание приложения', desc: 'Образы и запуск сервисов', pending: 'Скачиваем образ и запускаем контейнеры.', mascot: 'Самое интересное: скачиваю образ и поднимаю контейнеры — базу, Redis, веб-сервер и фоновые воркеры. Это займёт пару минут.' },
         superuser: { title: 'Учётная запись Django Admin', desc: 'Первый суперпользователь', pending: 'Создаём первого суперпользователя Django Admin.', mascot: 'Создаём суперпользователя Django Admin — это внутренняя панель сервера, не аккаунт в мессенджере. Задай надёжный пароль и сохрани его.' },
         nginx: { title: 'Nginx и HTTPS', desc: 'Обратный прокси и Let\'s Encrypt', pending: 'Настраиваем Nginx, получаем HTTPS-сертификат и привязываем домен.', mascot: 'Ставлю Nginx и получаю бесплатный HTTPS-сертификат от Let\'s Encrypt. Без HTTPS браузеры и клиенты не будут доверять серверу.' },
@@ -1056,7 +1070,7 @@
     }
 
     const BUILD_MASCOT_STEPS = new Set(['deploy', 'nginx']);
-    const SKIP_ALLOWED_STEPS = new Set(['system', 'ufw', 'awscli', 'superuser', 'nginx']);
+    const SKIP_ALLOWED_STEPS = new Set(['system', 'ufw', 'superuser', 'nginx']);
 
     let lang = localStorage.getItem('installer_lang') || 'en';
     const params = new URLSearchParams(location.search);
@@ -1069,7 +1083,7 @@
 
     const BUSY_LABEL_KEYS = {
       system: 'busySystem', ufw: 'busyUfw', docker: 'busyDocker', ghcr: 'busyGhcr',
-      env: 'busyEnv', awscli: 'busyAwscli', deploy: 'busyDeploy', superuser: 'busySuperuser',
+      env: 'busyEnv', deploy: 'busyDeploy', superuser: 'busySuperuser',
       nginx: 'nginxWorking',
     };
 
@@ -1592,7 +1606,7 @@
         const label = op === 'provision'
           ? t('awsProvisioning')
           : op === 'verify'
-            ? t('awsChecking')
+            ? t('awsCheckingDocker')
             : locked
               ? t('awsWorking')
               : '';
@@ -1605,6 +1619,7 @@
 
       const provisionBtn = document.getElementById('aws-provision-btn');
       const checkBtn = document.getElementById('aws-access-check-btn');
+      const otherCheckBtn = document.getElementById('s3-other-check-btn');
       if (provisionBtn) {
         provisionBtn.disabled = locked;
         if (op === 'provision') {
@@ -1616,9 +1631,17 @@
       if (checkBtn) {
         checkBtn.disabled = locked;
         if (op === 'verify') {
-          checkBtn.innerHTML = '<span class="spinner"></span>' + esc(t('awsChecking'));
+          checkBtn.innerHTML = '<span class="spinner"></span>' + esc(t('awsCheckingDocker'));
         } else if (!op) {
           checkBtn.textContent = t('checkAwsAccess');
+        }
+      }
+      if (otherCheckBtn) {
+        otherCheckBtn.disabled = locked;
+        if (op === 'verify') {
+          otherCheckBtn.innerHTML = '<span class="spinner"></span>' + esc(t('awsCheckingDocker'));
+        } else if (!op) {
+          otherCheckBtn.textContent = t('checkAwsAccess');
         }
       }
     }
@@ -1678,6 +1701,8 @@
       if (!region) return;
       const sel = document.getElementById('aws_s3_region_name');
       if (sel && sel.value !== region) sel.value = region;
+      const other = document.getElementById('s3_other_region');
+      if (other && other.value !== region) other.value = region;
     }
 
     function shouldRetryAwsVerify(data) {
@@ -2254,6 +2279,7 @@
       if (step.id === 'aws') {
         formEl.classList.remove('hidden');
         const a = state.aws_defaults || {};
+        const vendor = defaultS3Vendor(a);
         const setupMode = defaultAwsSetupMode(a);
         formEl.innerHTML = `
           <div class="env-form aws-form-root" id="aws-form-root">
@@ -2263,66 +2289,104 @@
               <h3 class="env-section-title">${t('awsTitle')}</h3>
               <p class="env-section-lead">${t('awsStepHelp')}</p>
               <div class="mode-switch" style="margin-top:12px">
-                <label><input type="radio" name="aws_setup_mode" value="auto" ${setupMode === 'auto' ? 'checked' : ''}> ${t('awsAuto')}</label>
-                <label><input type="radio" name="aws_setup_mode" value="manual" ${setupMode === 'manual' ? 'checked' : ''}> ${t('awsManual')}</label>
-              </div>
-              <p class="env-section-lead" id="aws-mode-desc" style="margin-top:12px;margin-bottom:0">${setupMode === 'manual' ? t('awsManualDesc') : t('awsAutoDesc')}</p>
-            </section>
-
-            <div id="aws-guide-auto" class="guide-callout ${setupMode !== 'auto' ? 'hidden' : ''}">
-              <span class="guide-callout-step">1</span>
-              <div class="guide-callout-body">
-                <strong>${t('awsGuideRequired')}</strong>
-                <p>${t('awsGuideAutoLead')}</p>
-                <a href="#" class="guide-callout-btn" id="aws-guide-link-auto">${t('awsGuideOpen')} ↗</a>
-              </div>
-            </div>
-            <div id="aws-guide-manual" class="guide-callout ${setupMode !== 'manual' ? 'hidden' : ''}">
-              <span class="guide-callout-step">1</span>
-              <div class="guide-callout-body">
-                <strong>${t('awsGuideRequired')}</strong>
-                <p>${t('awsGuideManualLead')}</p>
-                <a href="#" class="guide-callout-btn" id="aws-guide-link-manual">${t('awsGuideOpen')} ↗</a>
-              </div>
-            </div>
-
-            <section class="env-section ${setupMode !== 'auto' ? 'hidden' : ''}" id="aws-flow-auto-fields">
-              <h3 class="env-section-title">${t('awsSectionBootstrap')}</h3>
-              <p class="env-section-lead">${t('awsBootstrapHelp')}</p>
-              <div class="form-grid">
-                <label>${t('awsBootstrapKey')}<input type="text" id="aws_bootstrap_access_key_id" autocomplete="off" value="${esc(a.aws_bootstrap_access_key_id || '')}"></label>
-                <label>${t('awsBootstrapSecret')}<input type="text" id="aws_bootstrap_secret_access_key" autocomplete="off" value="${esc(a.aws_bootstrap_secret_access_key || '')}"></label>
+                <label><input type="radio" name="s3_vendor" value="aws" ${vendor === 'aws' ? 'checked' : ''}> ${t('s3VendorAws')}</label>
+                <label><input type="radio" name="s3_vendor" value="other" ${vendor === 'other' ? 'checked' : ''}> ${t('s3VendorOther')}</label>
               </div>
             </section>
 
-            <section class="env-section">
-              <h3 class="env-section-title">${t('awsSectionBucket')}</h3>
-              <div class="form-grid">
-                <label>${t('awsRegion')}
-                  <select id="aws_s3_region_name">
-                    ${['eu-north-1','eu-west-1','eu-central-1','us-east-1','us-west-2'].map(r =>
-                      `<option value="${r}" ${(a.aws_s3_region_name || 'eu-north-1') === r ? 'selected' : ''}>${r}</option>`).join('')}
-                  </select>
-                </label>
-                <label>${t('awsBucket')}<input type="text" id="aws_storage_bucket_name" autocomplete="off" value="${esc(a.aws_storage_bucket_name || '')}" placeholder="rumble-myserver-prod"></label>
-              </div>
-              <div class="actions ${setupMode !== 'auto' ? 'hidden' : ''}" id="aws-flow-auto-actions" style="margin:16px 0 0">
-                <button type="button" class="btn primary" id="aws-provision-btn">${t('awsProvision')}</button>
-              </div>
-            </section>
+            <div id="aws-vendor-aws-wrap" class="${vendor !== 'aws' ? 'hidden' : ''}">
+              <section class="env-section">
+                <h3 class="env-section-title">${t('awsSectionMode')}</h3>
+                <div class="mode-switch" style="margin-top:12px">
+                  <label><input type="radio" name="aws_setup_mode" value="auto" ${setupMode === 'auto' ? 'checked' : ''}> ${t('awsAuto')}</label>
+                  <label><input type="radio" name="aws_setup_mode" value="manual" ${setupMode === 'manual' ? 'checked' : ''}> ${t('awsManual')}</label>
+                </div>
+                <p class="env-section-lead" id="aws-mode-desc" style="margin-top:12px;margin-bottom:0">${setupMode === 'manual' ? t('awsManualDesc') : t('awsAutoDesc')}</p>
+              </section>
 
-            <section class="env-section ${setupMode !== 'manual' ? 'hidden' : ''}" id="aws-flow-manual-fields">
-              <h3 class="env-section-title">${t('awsSectionApp')}</h3>
-              <div class="form-grid">
-                <label>${t('awsAccessKey')}<input type="text" id="aws_access_key_id" autocomplete="off" value="${esc(a.aws_access_key_id || '')}"></label>
-                <label>${t('awsSecretKey')}<input type="text" id="aws_secret_access_key" autocomplete="off" value="${esc(a.aws_secret_access_key || '')}"></label>
-              </div>
-              <div class="env-inner" style="margin-top:12px">
-                <div class="actions" style="margin:0">
-                  <button type="button" class="btn secondary" id="aws-access-check-btn">${t('checkAwsAccess')}</button>
+              <div id="aws-guide-auto" class="guide-callout ${setupMode !== 'auto' ? 'hidden' : ''}">
+                <span class="guide-callout-step">1</span>
+                <div class="guide-callout-body">
+                  <strong>${t('awsGuideRequired')}</strong>
+                  <p>${t('awsGuideAutoLead')}</p>
+                  <a href="#" class="guide-callout-btn" id="aws-guide-link-auto">${t('awsGuideOpen')} ↗</a>
                 </div>
               </div>
-            </section>
+              <div id="aws-guide-manual" class="guide-callout ${setupMode !== 'manual' ? 'hidden' : ''}">
+                <span class="guide-callout-step">1</span>
+                <div class="guide-callout-body">
+                  <strong>${t('awsGuideRequired')}</strong>
+                  <p>${t('awsGuideManualLead')}</p>
+                  <a href="#" class="guide-callout-btn" id="aws-guide-link-manual">${t('awsGuideOpen')} ↗</a>
+                </div>
+              </div>
+
+              <section class="env-section ${setupMode !== 'auto' ? 'hidden' : ''}" id="aws-flow-auto-fields">
+                <h3 class="env-section-title">${t('awsSectionBootstrap')}</h3>
+                <p class="env-section-lead">${t('awsBootstrapHelp')}</p>
+                <div class="form-grid">
+                  <label>${t('awsBootstrapKey')}<input type="text" id="aws_bootstrap_access_key_id" autocomplete="off" value="${esc(a.aws_bootstrap_access_key_id || '')}"></label>
+                  <label>${t('awsBootstrapSecret')}<input type="text" id="aws_bootstrap_secret_access_key" autocomplete="off" value="${esc(a.aws_bootstrap_secret_access_key || '')}"></label>
+                </div>
+              </section>
+
+              <section class="env-section">
+                <h3 class="env-section-title">${t('awsSectionBucket')}</h3>
+                <div class="form-grid">
+                  <label>${t('awsRegion')}
+                    <select id="aws_s3_region_name">
+                      ${['eu-north-1','eu-west-1','eu-central-1','us-east-1','us-west-2'].map(r =>
+                        `<option value="${r}" ${(a.aws_s3_region_name || 'eu-north-1') === r ? 'selected' : ''}>${r}</option>`).join('')}
+                    </select>
+                  </label>
+                  <label>${t('awsBucket')}<input type="text" id="aws_storage_bucket_name" autocomplete="off" value="${esc(a.aws_storage_bucket_name || '')}" placeholder="rumble-myserver-prod"></label>
+                </div>
+                <div class="actions ${setupMode !== 'auto' ? 'hidden' : ''}" id="aws-flow-auto-actions" style="margin:16px 0 0">
+                  <button type="button" class="btn primary" id="aws-provision-btn">${t('awsProvision')}</button>
+                </div>
+              </section>
+
+              <section class="env-section ${setupMode !== 'manual' ? 'hidden' : ''}" id="aws-flow-manual-fields">
+                <h3 class="env-section-title">${t('awsSectionApp')}</h3>
+                <div class="form-grid">
+                  <label>${t('awsAccessKey')}<input type="text" id="aws_access_key_id" autocomplete="off" value="${esc(a.aws_access_key_id || '')}"></label>
+                  <label>${t('awsSecretKey')}<input type="text" id="aws_secret_access_key" autocomplete="off" value="${esc(a.aws_secret_access_key || '')}"></label>
+                </div>
+                <div class="env-inner" style="margin-top:12px">
+                  <div class="actions" style="margin:0">
+                    <button type="button" class="btn secondary" id="aws-access-check-btn">${t('checkAwsAccess')}</button>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <div id="aws-vendor-other-wrap" class="${vendor !== 'other' ? 'hidden' : ''}">
+              <section class="env-section">
+                <p class="env-section-lead">${t('s3OtherDesc')}</p>
+                <div class="form-grid">
+                  <label>${t('s3Endpoint')}<input type="url" id="s3_other_endpoint" autocomplete="off" value="${esc(a.aws_s3_endpoint_url || '')}" placeholder="${esc(t('s3EndpointPh'))}"></label>
+                  <label>${t('awsRegion')}<input type="text" id="s3_other_region" autocomplete="off" value="${esc(a.aws_s3_region_name || '')}" placeholder="ru-1"></label>
+                  <label>${t('awsBucket')}<input type="text" id="s3_other_bucket" autocomplete="off" value="${esc(a.aws_storage_bucket_name || '')}" placeholder="rumble-myserver-prod"></label>
+                  <label>${t('awsAccessKey')}<input type="text" id="s3_other_access_key" autocomplete="off" value="${esc(a.aws_access_key_id || '')}"></label>
+                  <label>${t('awsSecretKey')}<input type="text" id="s3_other_secret" autocomplete="off" value="${esc(a.aws_secret_access_key || '')}"></label>
+                  <label>${t('s3AddressingStyle')}
+                    <select id="s3_addressing_style">
+                      ${['auto','path','virtual'].map(v =>
+                        `<option value="${v}" ${(a.s3_addressing_style || 'auto') === v ? 'selected' : ''}>${v}</option>`).join('')}
+                    </select>
+                  </label>
+                  <label>${t('s3SignatureVersion')}
+                    <select id="s3_signature_version">
+                      ${['s3v4','s3'].map(v =>
+                        `<option value="${v}" ${(a.s3_signature_version || 's3v4') === v ? 'selected' : ''}>${v}</option>`).join('')}
+                    </select>
+                  </label>
+                </div>
+                <div class="actions" style="margin:16px 0 0">
+                  <button type="button" class="btn secondary" id="s3-other-check-btn">${t('checkAwsAccess')}</button>
+                </div>
+              </section>
+            </div>
 
             <div id="aws-verify-area" class="env-section" style="padding-top:0;border:none;background:transparent">
               <div id="aws-access-status"></div>
@@ -2332,11 +2396,13 @@
 
             <div id="aws-status-list" class="status-list"></div>
           </div>`;
+        wireAwsVendorMode(formEl);
         wireAwsSetupMode(formEl);
-        formEl.querySelector('#aws-guide-link-auto').onclick = e => { e.preventDefault(); if (!isAwsStepBusy()) openAwsGuide('auto'); };
-        formEl.querySelector('#aws-guide-link-manual').onclick = e => { e.preventDefault(); if (!isAwsStepBusy()) openAwsGuide('manual'); };
-        formEl.querySelector('#aws-provision-btn').onclick = () => { if (!isAwsStepBusy()) provisionAws(); };
-        formEl.querySelector('#aws-access-check-btn').onclick = () => { if (!isAwsStepBusy()) checkAwsAccess(); };
+        formEl.querySelector('#aws-guide-link-auto')?.addEventListener('click', e => { e.preventDefault(); if (!isAwsStepBusy()) openAwsGuide('auto'); });
+        formEl.querySelector('#aws-guide-link-manual')?.addEventListener('click', e => { e.preventDefault(); if (!isAwsStepBusy()) openAwsGuide('manual'); });
+        formEl.querySelector('#aws-provision-btn')?.addEventListener('click', () => { if (!isAwsStepBusy()) provisionAws(); });
+        formEl.querySelector('#aws-access-check-btn')?.addEventListener('click', () => { if (!isAwsStepBusy()) checkAwsAccess(); });
+        formEl.querySelector('#s3-other-check-btn')?.addEventListener('click', () => { if (!isAwsStepBusy()) checkAwsAccess(); });
         syncAwsFormButtons();
         return;
       }
@@ -2384,25 +2450,59 @@
       }
     }
 
+    function s3Vendor() {
+      return document.querySelector('input[name="s3_vendor"]:checked')?.value || 'aws';
+    }
+
+    function defaultS3Vendor(a) {
+      if (a?.s3_vendor === 'other' || a?.s3_vendor === 'aws') return a.s3_vendor;
+      const endpoint = (a?.aws_s3_endpoint_url || '').toLowerCase();
+      if (endpoint && !endpoint.includes('amazonaws.com')) return 'other';
+      return 'aws';
+    }
+
     function awsSetupMode() {
       return document.querySelector('input[name="aws_setup_mode"]:checked')?.value || 'auto';
     }
 
     function awsAppCredentialsReady() {
       const g = id => document.getElementById(id);
+      if (s3Vendor() === 'other') {
+        const key = (g('s3_other_access_key')?.value || state?.aws_defaults?.aws_access_key_id || '').trim();
+        const secret = (g('s3_other_secret')?.value || state?.aws_defaults?.aws_secret_access_key || '').trim();
+        return !!(key && secret);
+      }
       const key = (g('aws_access_key_id')?.value || state?.aws_defaults?.aws_access_key_id || '').trim();
       const secret = (g('aws_secret_access_key')?.value || state?.aws_defaults?.aws_secret_access_key || '').trim();
       return !!(key && secret);
     }
 
     function awsAutoRunStepBlocked() {
-      return currentStepId === 'aws' && awsSetupMode() === 'auto' && !awsAppCredentialsReady();
+      return currentStepId === 'aws'
+        && s3Vendor() === 'aws'
+        && awsSetupMode() === 'auto'
+        && !awsAppCredentialsReady();
     }
 
     function defaultAwsSetupMode(a) {
+      if (defaultS3Vendor(a) === 'other') return 'manual';
       if (a?.aws_access_key_id && !a?.aws_bootstrap_access_key_id) return 'manual';
       if (a?.aws_bootstrap_access_key_id) return 'auto';
       return 'auto';
+    }
+
+    function wireAwsVendorMode(formEl) {
+      formEl.querySelectorAll('input[name="s3_vendor"]').forEach(r => {
+        r.onchange = () => {
+          const other = s3Vendor() === 'other';
+          formEl.querySelector('#aws-vendor-aws-wrap').classList.toggle('hidden', other);
+          formEl.querySelector('#aws-vendor-other-wrap').classList.toggle('hidden', !other);
+          if (currentStepId === 'aws') {
+            const step = state?.steps?.find(s => s.id === 'aws');
+            if (step) renderActions(step);
+          }
+        };
+      });
     }
 
     function wireAwsSetupMode(formEl) {
@@ -2546,7 +2646,21 @@
         return base;
       }
       if (stepId === 'aws') {
+        const vendor = s3Vendor();
+        if (vendor === 'other') {
+          return {
+            s3_vendor: 'other',
+            aws_s3_endpoint_url: g('s3_other_endpoint')?.value || '',
+            aws_s3_region_name: g('s3_other_region')?.value || '',
+            aws_storage_bucket_name: g('s3_other_bucket')?.value || '',
+            aws_access_key_id: g('s3_other_access_key')?.value || '',
+            aws_secret_access_key: g('s3_other_secret')?.value || '',
+            s3_addressing_style: g('s3_addressing_style')?.value || 'auto',
+            s3_signature_version: g('s3_signature_version')?.value || 's3v4',
+          };
+        }
         return {
+          s3_vendor: 'aws',
           aws_bootstrap_access_key_id: g('aws_bootstrap_access_key_id')?.value || '',
           aws_bootstrap_secret_access_key: g('aws_bootstrap_secret_access_key')?.value || '',
           aws_access_key_id: g('aws_access_key_id')?.value || '',
