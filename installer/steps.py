@@ -1469,12 +1469,20 @@ def _registration_site_from_url(url: str | None) -> str | None:
     return None
 
 
+def _server_domain_url(domain: str) -> str:
+    domain = (domain or "").strip()
+    if not domain:
+        return ""
+    domain = re.sub(r"^https?://", "", domain, flags=re.I).rstrip("/")
+    return f"https://{domain}/"
+
+
 def _default_registration_payload(ctx: InstallerContext) -> dict[str, Any]:
     saved_site = ctx.get("registration_site") or REGISTRATION_SITES[0]
     return {
         "registration_site": saved_site,
         "sites": REGISTRATION_SITES,
-        "server_domain": ctx.get("domain") or "",
+        "server_domain": _server_domain_url(ctx.get("domain") or ""),
     }
 
 
@@ -1538,7 +1546,7 @@ def check_registration(ctx: InstallerContext) -> StepResult:
 
     users_registration_url = (data or {}).get("users_registration_url") or ""
     server_domain = (data or {}).get("server_domain") or ""
-    expected_domain = (ctx.get("domain") or "").strip()
+    expected_domain = _server_domain_url(ctx.get("domain") or "")
     known_urls = _known_registration_urls()
 
     if users_registration_url not in known_urls:
@@ -1583,7 +1591,7 @@ def apply_registration(ctx: InstallerContext, payload: dict[str, Any]) -> StepRe
             defaults=_default_registration_payload(ctx),
         )
 
-    server_domain = (ctx.get("domain") or "").strip()
+    server_domain = _server_domain_url(ctx.get("domain") or "")
     if not server_domain:
         return _fail(
             "Server domain is not set — complete the .env step first.",

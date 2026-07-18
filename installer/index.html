@@ -2022,12 +2022,16 @@
     }
 
     function wireRegistrationForm(root) {
+      const formatServerDomainUrl = domain => {
+        const host = (domain || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+        return host ? `https://${host}/` : '';
+      };
       const updatePreview = () => {
         const site = root.querySelector('input[name="registration_site"]:checked')?.value || 'https://rumble-msg.com';
         const urlEl = root.querySelector('#registration-preview-url');
         const domainEl = root.querySelector('#registration-preview-domain');
         if (urlEl) urlEl.textContent = site.replace(/\/$/, '') + '/register';
-        if (domainEl) domainEl.textContent = root.dataset.serverDomain || state?.domain || '';
+        if (domainEl) domainEl.textContent = formatServerDomainUrl(root.dataset.serverDomain || state?.domain || '');
       };
       root.querySelectorAll('input[name="registration_site"]').forEach(r => {
         r.onchange = updatePreview;
@@ -2469,7 +2473,12 @@
         const reg = step.data?.defaults || {};
         const sites = reg.sites || ['https://rumble-msg.com', 'https://rmbl-msg.ru'];
         const selectedSite = reg.registration_site || sites[0] || 'https://rumble-msg.com';
-        const serverDomain = reg.server_domain || state?.domain || '';
+        const rawDomain = reg.server_domain || state?.domain || '';
+        const formatServerDomainUrl = domain => {
+          const host = (domain || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+          return host ? `https://${host}/` : '';
+        };
+        const serverDomain = formatServerDomainUrl(rawDomain);
         const siteLabel = site => {
           if (site === 'https://rumble-msg.com') return t('registrationSiteRumble');
           if (site === 'https://rmbl-msg.ru') return t('registrationSiteRmbl');
