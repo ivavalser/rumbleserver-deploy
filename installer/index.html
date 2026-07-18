@@ -818,6 +818,13 @@
         registrationSiteRmbl: 'rmbl-msg.ru (Russia)',
         registrationPreviewUsersUrl: 'Users registration url',
         registrationPreviewServerDomain: 'Server domain',
+        registrationServerName: 'Server name (optional)',
+        registrationServerNameHelp: 'A friendly name shown to users in the app. Later you will need it to connect this server with others in a local network. Leave empty if you do not need it yet — like the registration site choice, this is optional.',
+        registrationServerNamePh: 'My Chat Server',
+        registrationPreviewServerName: 'Server name',
+        registrationPreviewAccessKey: 'Self local network access key',
+        registrationAccessKeyWillGenerate: '(generated automatically when you run this step)',
+        registrationAccessKeySavedHelp: 'Save this key in a safe place — you will need it when connecting to other servers.',
         finishCompleteTitle: 'Everything is up and running!',
         finishAllRunning: 'All services are running and health checks passed. Your server is ready.',
         finishSomeIssues: 'Some checks need attention — review the status below.',
@@ -1026,6 +1033,13 @@
         registrationSiteRmbl: 'rmbl-msg.ru (Россия)',
         registrationPreviewUsersUrl: 'Users registration url',
         registrationPreviewServerDomain: 'Server domain',
+        registrationServerName: 'Server name (необязательно)',
+        registrationServerNameHelp: 'Красивое название, которое пользователи увидят в приложении. Позже оно понадобится, если захочешь объединить этот сервер с другими в локальной сети. Можно оставить пустым — как и выбор сайта регистрации, это необязательно.',
+        registrationServerNamePh: 'Мой чат-сервер',
+        registrationPreviewServerName: 'Server name',
+        registrationPreviewAccessKey: 'Self local network access key',
+        registrationAccessKeyWillGenerate: '(сгенерируется автоматически при выполнении шага)',
+        registrationAccessKeySavedHelp: 'Сохрани этот ключ в надёжном месте — он понадобится при подключении к другим серверам.',
         finishCompleteTitle: 'Всё работает!',
         finishAllRunning: 'Все сервисы запущены, проверки пройдены. Сервер готов к работе.',
         finishSomeIssues: 'Есть замечания — смотри статус ниже.',
@@ -1060,7 +1074,7 @@
         aws: { title: 'S3 storage', desc: 'Bucket and object storage credentials', pending: 'Configure S3 for file storage — AWS with auto-provisioning or any S3-compatible provider.', mascot: 'Uploaded files go to a private S3 bucket. Choose AWS for automatic setup or another S3-compatible provider — access is verified inside the app Docker image before moving on.' },
         deploy: { title: 'Deploy application', desc: 'Pull images and start services', pending: 'Pull the container image and start the application.', mascot: 'Now the fun part: pull the image and start containers — database, Redis, web server, and background workers. This takes a minute or two.' },
         superuser: { title: 'Django Admin account', desc: 'First superuser', pending: 'Create the first Django Admin superuser account.', mascot: 'We create a Django Admin superuser — this is the internal server panel, not a messenger account. Pick a strong password and keep it safe.' },
-        registration: { title: 'User registration site', desc: 'Registration URL and server domain', pending: 'Choose the public site where your users will register.', mascot: 'Invitations and client apps send new users to the RMBL website to sign up. Pick rumble-msg.com or rmbl-msg.ru — I will save the registration URL and your server domain in App Settings.' },
+        registration: { title: 'User registration site', desc: 'Registration URL and server domain', pending: 'Choose the public site where your users will register. Optionally set a friendly server name.', mascot: 'Invitations and client apps send new users to the RMBL website to sign up. Pick rumble-msg.com or rmbl-msg.ru — I will save the registration URL and your server domain in App Settings. If you add a server name, I will also generate a local network access key for future federation.' },
         nginx: { title: 'Nginx and HTTPS', desc: 'Reverse proxy and Let\'s Encrypt', pending: 'Set up Nginx, obtain an HTTPS certificate, and connect your domain.', mascot: 'I install Nginx and get a free HTTPS certificate from Let\'s Encrypt. Without HTTPS browsers and apps will not trust your server.' },
         finish: { title: 'Installation complete', desc: 'Summary and next steps', pending: 'Review the installation summary.', mascot: 'We did it! Below is a health check of every service. When you are satisfied, finish to close the installer — your server keeps running.' },
       },
@@ -1073,7 +1087,7 @@
         aws: { title: 'S3-хранилище', desc: 'Бакет и ключи доступа', pending: 'Настрой S3 для файлов — AWS с автопровижинингом или любой S3-compatible провайдер.', mascot: 'Файлы хранятся в закрытом S3-бакете. Выбери AWS для автоматической настройки или другого S3-провайдера — доступ проверяется внутри Docker-образа приложения.' },
         deploy: { title: 'Развёртывание приложения', desc: 'Образы и запуск сервисов', pending: 'Скачиваем образ и запускаем контейнеры.', mascot: 'Самое интересное: скачиваю образ и поднимаю контейнеры — базу, Redis, веб-сервер и фоновые воркеры. Это займёт пару минут.' },
         superuser: { title: 'Учётная запись Django Admin', desc: 'Первый суперпользователь', pending: 'Создаём первого суперпользователя Django Admin.', mascot: 'Создаём суперпользователя Django Admin — это внутренняя панель сервера, не аккаунт в мессенджере. Задай надёжный пароль и сохрани его.' },
-        registration: { title: 'Сайт регистрации пользователей', desc: 'URL регистрации и домен сервера', pending: 'Выбери публичный сайт, на котором пользователи будут регистрироваться.', mascot: 'Приглашения и клиенты отправляют новых пользователей на сайт RMBL для регистрации. Выбери rumble-msg.com или rmbl-msg.ru — я сохраню URL регистрации и домен твоего сервера в App Settings.' },
+        registration: { title: 'Сайт регистрации пользователей', desc: 'URL регистрации и домен сервера', pending: 'Выбери публичный сайт для регистрации пользователей. По желанию задай красивое название сервера.', mascot: 'Приглашения и клиенты отправляют новых пользователей на сайт RMBL для регистрации. Выбери rumble-msg.com или rmbl-msg.ru — я сохраню URL регистрации и домен сервера в App Settings. Если укажешь название сервера, также сгенерирую ключ локальной сети для будущей федерации.' },
         nginx: { title: 'Nginx и HTTPS', desc: 'Обратный прокси и Let\'s Encrypt', pending: 'Настраиваем Nginx, получаем HTTPS-сертификат и привязываем домен.', mascot: 'Ставлю Nginx и получаю бесплатный HTTPS-сертификат от Let\'s Encrypt. Без HTTPS браузеры и клиенты не будут доверять серверу.' },
         finish: { title: 'Установка завершена', desc: 'Итоги и следующие шаги', pending: 'Просмотри сводку по установке.', mascot: 'Готово! Ниже — проверка всех сервисов. Когда всё устроит, заверши установку — сервер продолжит работать, а мастер закроется.' },
       },
@@ -2030,12 +2044,33 @@
         const site = root.querySelector('input[name="registration_site"]:checked')?.value || 'https://rumble-msg.com';
         const urlEl = root.querySelector('#registration-preview-url');
         const domainEl = root.querySelector('#registration-preview-domain');
+        const nameEl = root.querySelector('#registration-preview-name');
+        const accessWrap = root.querySelector('#registration-access-key-wrap');
+        const accessHint = root.querySelector('#registration-access-key-hint');
+        const accessValue = root.querySelector('#registration-access-key-value');
+        const serverName = root.querySelector('#server_name')?.value?.trim() || '';
         if (urlEl) urlEl.textContent = site.replace(/\/$/, '') + '/register';
         if (domainEl) domainEl.textContent = formatServerDomainUrl(root.dataset.serverDomain || state?.domain || '');
+        if (nameEl) nameEl.textContent = serverName || '—';
+        if (accessWrap) {
+          const savedKey = root.dataset.accessKey || '';
+          if (savedKey) {
+            accessWrap.classList.remove('hidden');
+            if (accessHint) accessHint.textContent = t('registrationAccessKeySavedHelp');
+            if (accessValue) accessValue.textContent = savedKey;
+          } else if (serverName) {
+            accessWrap.classList.remove('hidden');
+            if (accessHint) accessHint.textContent = t('registrationAccessKeyWillGenerate');
+            if (accessValue) accessValue.textContent = '';
+          } else {
+            accessWrap.classList.add('hidden');
+          }
+        }
       };
       root.querySelectorAll('input[name="registration_site"]').forEach(r => {
         r.onchange = updatePreview;
       });
+      root.querySelector('#server_name')?.addEventListener('input', updatePreview);
       updatePreview();
     }
 
@@ -2479,12 +2514,15 @@
           return host ? `https://${host}/` : '';
         };
         const serverDomain = formatServerDomainUrl(rawDomain);
+        const savedServerName = reg.server_name || '';
+        const savedAccessKey = reg.self_local_network_access_key || '';
         const siteLabel = site => {
           if (site === 'https://rumble-msg.com') return t('registrationSiteRumble');
           if (site === 'https://rmbl-msg.ru') return t('registrationSiteRmbl');
           return site.replace(/^https:\/\//, '');
         };
         formEl.dataset.serverDomain = serverDomain;
+        formEl.dataset.accessKey = savedAccessKey;
         formEl.innerHTML = `<div class="form-stack">
           <p class="field-hint">${esc(t('registrationSiteHelp'))}</p>
           <div class="mode-switch" id="registration-site-switch">
@@ -2495,6 +2533,15 @@
           <div class="env-inner" id="registration-preview">
             <p class="field-hint"><strong>${esc(t('registrationPreviewUsersUrl'))}:</strong> <span id="registration-preview-url">${esc((selectedSite.replace(/\/$/, '') + '/register'))}</span></p>
             <p class="field-hint"><strong>${esc(t('registrationPreviewServerDomain'))}:</strong> <span id="registration-preview-domain">${esc(serverDomain)}</span></p>
+          </div>
+          <label><span class="field-label">${esc(t('registrationServerName'))}</span><input type="text" id="server_name" autocomplete="off" value="${esc(savedServerName)}" placeholder="${esc(t('registrationServerNamePh'))}"></label>
+          <p class="field-hint">${esc(t('registrationServerNameHelp'))}</p>
+          <div class="env-inner" id="registration-name-preview">
+            <p class="field-hint"><strong>${esc(t('registrationPreviewServerName'))}:</strong> <span id="registration-preview-name">${esc(savedServerName || '—')}</span></p>
+            <div id="registration-access-key-wrap" class="${savedServerName || savedAccessKey ? '' : 'hidden'}">
+              <p class="field-hint"><strong>${esc(t('registrationPreviewAccessKey'))}:</strong> <span id="registration-access-key-value">${esc(savedAccessKey)}</span></p>
+              <p class="field-hint" id="registration-access-key-hint">${esc(savedAccessKey ? t('registrationAccessKeySavedHelp') : t('registrationAccessKeyWillGenerate'))}</p>
+            </div>
           </div>
         </div>`;
         wireRegistrationForm(formEl);
@@ -2763,6 +2810,7 @@
       };
       if (stepId === 'registration') return {
         registration_site: document.querySelector('input[name="registration_site"]:checked')?.value || 'https://rumble-msg.com',
+        server_name: document.getElementById('server_name')?.value?.trim() || '',
       };
       if (stepId === 'nginx') return { certbot_email: g('certbot_email')?.value || '', domain: g('nginx_domain')?.value || '' };
       return {};

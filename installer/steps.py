@@ -1477,12 +1477,18 @@ def _server_domain_url(domain: str) -> str:
     return f"https://{domain}/"
 
 
+def _generate_local_network_access_key() -> str:
+    return secrets.token_urlsafe(48)
+
+
 def _default_registration_payload(ctx: InstallerContext) -> dict[str, Any]:
     saved_site = ctx.get("registration_site") or REGISTRATION_SITES[0]
     return {
         "registration_site": saved_site,
         "sites": REGISTRATION_SITES,
         "server_domain": _server_domain_url(ctx.get("domain") or ""),
+        "server_name": ctx.get("server_name") or "",
+        "self_local_network_access_key": ctx.get("self_local_network_access_key") or "",
     }
 
 
@@ -1503,6 +1509,8 @@ def _read_appsettings_registration(ctx: InstallerContext) -> tuple[dict[str, Any
         "print(json.dumps({"
         "'users_registration_url': s.users_registration_url,"
         "'server_domain': s.server_domain,"
+        "'server_name': s.server_name,"
+        "'self_local_network_access_key': s.self_local_network_access_key,"
         "}))\n"
     )
     proc = ctx.run(
@@ -1571,14 +1579,36 @@ def check_registration(ctx: InstallerContext) -> StepResult:
             },
         )
 
+    db_server_name = ((data or {}).get("server_name") or "").strip()
+    db_access_key = ((data or {}).get("self_local_network_access_key") or "").strip()
+    if db_server_name and not db_access_key:
+        return _fail(
+            "Server name is set but the local network access key is missing.",
+            manual="Run this step again to generate the access key.",
+            defaults={
+                **defaults,
+                "registration_site": _registration_site_from_url(users_registration_url)
+                or defaults["registration_site"],
+                "server_name": db_server_name,
+            },
+        )
+
     registration_site = _registration_site_from_url(users_registration_url) or defaults["registration_site"]
     ctx.set("registration_site", registration_site)
+    ctx.set("server_name", db_server_name)
+    ctx.set("self_local_network_access_key", db_access_key if db_server_name else "")
+
+    message = f"Registration site configured: {users_registration_url}, server domain: {server_domain}."
+    if db_server_name:
+        message += f" Server name: {db_server_name}."
     return _ok(
-        f"Registration site configured: {users_registration_url}, server domain: {server_domain}.",
+        message,
         defaults={
             **defaults,
             "registration_site": registration_site,
             "users_registration_url": users_registration_url,
+            "server_name": db_server_name,
+            "self_local_network_access_key": db_access_key if db_server_name else "",
         },
     )
 
@@ -1599,13 +1629,39 @@ def apply_registration(ctx: InstallerContext, payload: dict[str, Any]) -> StepRe
         )
 
     users_registration_url = _registration_url_for_site(registration_site)
+    server_name = (payload.get("server_name") or ctx.get("server_name") or "").strip()
+    if len(server_name) > 255:
+        return _fail(
+            "Server name is too long (max 255 characters).",
+            defaults=_default_registration_payload(ctx),
+        )
+
+    current_data, read_err = _read_appsettings_registration(ctx)
+    if read_err and "Complete the deploy step first" in (read_err.message or ""):
+        return read_err
+    current = current_data or {}
+
+    if server_name:
+        existing_name = (current.get("server_name") or "").strip()
+        existing_key = (current.get("self_local_network_access_key") or "").strip()
+        if server_name == existing_name and existing_key:
+            access_key = existing_key
+        else:
+            access_key = _generate_local_network_access_key()
+    else:
+        access_key = ""
+
     shell_script = (
         "from server.models import AppSettings\n"
         f"registration_url = {json.dumps(users_registration_url)}\n"
         f"server_domain = {json.dumps(server_domain)}\n"
+        f"server_name = {json.dumps(server_name)}\n"
+        f"access_key = {json.dumps(access_key)}\n"
         "settings = AppSettings.load()\n"
         "settings.users_registration_url = registration_url\n"
         "settings.server_domain = server_domain\n"
+        "settings.server_name = server_name or None\n"
+        "settings.self_local_network_access_key = access_key\n"
         "settings.save()\n"
         "print('ok')\n"
     )
@@ -1622,7 +1678,13 @@ def apply_registration(ctx: InstallerContext, payload: dict[str, Any]) -> StepRe
             defaults=_default_registration_payload(ctx),
         )
 
-    ctx.set("registration_site", registration_site)
+    ctx.update(
+        {
+            "registration_site": registration_site,
+            "server_name": server_name,
+            "self_local_network_access_key": access_key if server_name else "",
+        }
+    )
     return check_registration(ctx)
 
 
