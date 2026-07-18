@@ -707,6 +707,7 @@
         busyGhcr: 'Logging in to registry',
         busyEnv: 'Saving configuration',
         busySuperuser: 'Creating admin account',
+        busyRegistration: 'Saving registration settings',
         busyDeploy: 'Deploying application',
         ghcrKey: 'GHCR key',
         ghcrKeyPh: 'Key from maintainer',
@@ -812,6 +813,11 @@
         adminPasswordGenerate: 'Generate',
         adminPasswordMismatch: 'Passwords do not match.',
         adminPasswordRequired: 'Enter and confirm the password.',
+        registrationSiteHelp: 'Client apps and invitation links send new users to this website to register. Choose the site your users should use — we will save it in App Settings together with your server domain so registration works correctly.',
+        registrationSiteRumble: 'rumble-msg.com (international)',
+        registrationSiteRmbl: 'rmbl-msg.ru (Russia)',
+        registrationPreviewUsersUrl: 'Users registration url',
+        registrationPreviewServerDomain: 'Server domain',
         finishCompleteTitle: 'Everything is up and running!',
         finishAllRunning: 'All services are running and health checks passed. Your server is ready.',
         finishSomeIssues: 'Some checks need attention — review the status below.',
@@ -918,6 +924,7 @@
         busyGhcr: 'Авторизуемся в реестре образов',
         busyEnv: 'Сохраняем конфигурацию',
         busySuperuser: 'Создаём учётную запись администратора',
+        busyRegistration: 'Сохраняем настройки регистрации',
         busyDeploy: 'Разворачиваем приложение',
         ghcrKey: 'Ключ GHCR',
         ghcrKeyPh: 'Ключ от команды RMBL',
@@ -1014,6 +1021,11 @@
         adminPasswordGenerate: 'Сгенерировать',
         adminPasswordMismatch: 'Пароли не совпадают.',
         adminPasswordRequired: 'Введи пароль и подтверждение.',
+        registrationSiteHelp: 'Клиентские приложения и ссылки-приглашения отправляют новых пользователей на этот сайт для регистрации. Выбери сайт, который будут использовать твои пользователи — мы сохраним его в App Settings вместе с доменом сервера, чтобы регистрация работала корректно.',
+        registrationSiteRumble: 'rumble-msg.com (международный)',
+        registrationSiteRmbl: 'rmbl-msg.ru (Россия)',
+        registrationPreviewUsersUrl: 'Users registration url',
+        registrationPreviewServerDomain: 'Server domain',
         finishCompleteTitle: 'Всё работает!',
         finishAllRunning: 'Все сервисы запущены, проверки пройдены. Сервер готов к работе.',
         finishSomeIssues: 'Есть замечания — смотри статус ниже.',
@@ -1048,6 +1060,7 @@
         aws: { title: 'S3 storage', desc: 'Bucket and object storage credentials', pending: 'Configure S3 for file storage — AWS with auto-provisioning or any S3-compatible provider.', mascot: 'Uploaded files go to a private S3 bucket. Choose AWS for automatic setup or another S3-compatible provider — access is verified inside the app Docker image before moving on.' },
         deploy: { title: 'Deploy application', desc: 'Pull images and start services', pending: 'Pull the container image and start the application.', mascot: 'Now the fun part: pull the image and start containers — database, Redis, web server, and background workers. This takes a minute or two.' },
         superuser: { title: 'Django Admin account', desc: 'First superuser', pending: 'Create the first Django Admin superuser account.', mascot: 'We create a Django Admin superuser — this is the internal server panel, not a messenger account. Pick a strong password and keep it safe.' },
+        registration: { title: 'User registration site', desc: 'Registration URL and server domain', pending: 'Choose the public site where your users will register.', mascot: 'Invitations and client apps send new users to the RMBL website to sign up. Pick rumble-msg.com or rmbl-msg.ru — I will save the registration URL and your server domain in App Settings.' },
         nginx: { title: 'Nginx and HTTPS', desc: 'Reverse proxy and Let\'s Encrypt', pending: 'Set up Nginx, obtain an HTTPS certificate, and connect your domain.', mascot: 'I install Nginx and get a free HTTPS certificate from Let\'s Encrypt. Without HTTPS browsers and apps will not trust your server.' },
         finish: { title: 'Installation complete', desc: 'Summary and next steps', pending: 'Review the installation summary.', mascot: 'We did it! Below is a health check of every service. When you are satisfied, finish to close the installer — your server keeps running.' },
       },
@@ -1060,13 +1073,14 @@
         aws: { title: 'S3-хранилище', desc: 'Бакет и ключи доступа', pending: 'Настрой S3 для файлов — AWS с автопровижинингом или любой S3-compatible провайдер.', mascot: 'Файлы хранятся в закрытом S3-бакете. Выбери AWS для автоматической настройки или другого S3-провайдера — доступ проверяется внутри Docker-образа приложения.' },
         deploy: { title: 'Развёртывание приложения', desc: 'Образы и запуск сервисов', pending: 'Скачиваем образ и запускаем контейнеры.', mascot: 'Самое интересное: скачиваю образ и поднимаю контейнеры — базу, Redis, веб-сервер и фоновые воркеры. Это займёт пару минут.' },
         superuser: { title: 'Учётная запись Django Admin', desc: 'Первый суперпользователь', pending: 'Создаём первого суперпользователя Django Admin.', mascot: 'Создаём суперпользователя Django Admin — это внутренняя панель сервера, не аккаунт в мессенджере. Задай надёжный пароль и сохрани его.' },
+        registration: { title: 'Сайт регистрации пользователей', desc: 'URL регистрации и домен сервера', pending: 'Выбери публичный сайт, на котором пользователи будут регистрироваться.', mascot: 'Приглашения и клиенты отправляют новых пользователей на сайт RMBL для регистрации. Выбери rumble-msg.com или rmbl-msg.ru — я сохраню URL регистрации и домен твоего сервера в App Settings.' },
         nginx: { title: 'Nginx и HTTPS', desc: 'Обратный прокси и Let\'s Encrypt', pending: 'Настраиваем Nginx, получаем HTTPS-сертификат и привязываем домен.', mascot: 'Ставлю Nginx и получаю бесплатный HTTPS-сертификат от Let\'s Encrypt. Без HTTPS браузеры и клиенты не будут доверять серверу.' },
         finish: { title: 'Установка завершена', desc: 'Итоги и следующие шаги', pending: 'Просмотри сводку по установке.', mascot: 'Готово! Ниже — проверка всех сервисов. Когда всё устроит, заверши установку — сервер продолжит работать, а мастер закроется.' },
       },
     };
 
     function formStepsSet() {
-      const steps = new Set(['ghcr', 'env', 'aws', 'superuser', 'nginx']);
+      const steps = new Set(['ghcr', 'env', 'aws', 'superuser', 'registration', 'nginx']);
       if (state?.ghcr_key_set) steps.delete('ghcr');
       if (state?.domain) steps.delete('env');
       return steps;
@@ -1090,7 +1104,7 @@
 
     const BUSY_LABEL_KEYS = {
       system: 'busySystem', ufw: 'busyUfw', docker: 'busyDocker', ghcr: 'busyGhcr',
-      env: 'busyEnv', deploy: 'busyDeploy', superuser: 'busySuperuser',
+      env: 'busyEnv', deploy: 'busyDeploy', superuser: 'busySuperuser', registration: 'busyRegistration',
       nginx: 'nginxWorking',
     };
 
@@ -2007,6 +2021,20 @@
       };
     }
 
+    function wireRegistrationForm(root) {
+      const updatePreview = () => {
+        const site = root.querySelector('input[name="registration_site"]:checked')?.value || 'https://rumble-msg.com';
+        const urlEl = root.querySelector('#registration-preview-url');
+        const domainEl = root.querySelector('#registration-preview-domain');
+        if (urlEl) urlEl.textContent = site.replace(/\/$/, '') + '/register';
+        if (domainEl) domainEl.textContent = root.dataset.serverDomain || state?.domain || '';
+      };
+      root.querySelectorAll('input[name="registration_site"]').forEach(r => {
+        r.onchange = updatePreview;
+      });
+      updatePreview();
+    }
+
     function setLang(l) {
       lang = l;
       localStorage.setItem('installer_lang', l);
@@ -2436,6 +2464,33 @@
         wireSuperuserPasswordForm(formEl);
         return;
       }
+      if (step.id === 'registration') {
+        formEl.classList.remove('hidden');
+        const reg = step.data?.defaults || {};
+        const sites = reg.sites || ['https://rumble-msg.com', 'https://rmbl-msg.ru'];
+        const selectedSite = reg.registration_site || sites[0] || 'https://rumble-msg.com';
+        const serverDomain = reg.server_domain || state?.domain || '';
+        const siteLabel = site => {
+          if (site === 'https://rumble-msg.com') return t('registrationSiteRumble');
+          if (site === 'https://rmbl-msg.ru') return t('registrationSiteRmbl');
+          return site.replace(/^https:\/\//, '');
+        };
+        formEl.dataset.serverDomain = serverDomain;
+        formEl.innerHTML = `<div class="form-stack">
+          <p class="field-hint">${esc(t('registrationSiteHelp'))}</p>
+          <div class="mode-switch" id="registration-site-switch">
+            ${sites.map(site =>
+              `<label><input type="radio" name="registration_site" value="${esc(site)}" ${selectedSite === site ? 'checked' : ''}> ${esc(siteLabel(site))}</label>`
+            ).join('')}
+          </div>
+          <div class="env-inner" id="registration-preview">
+            <p class="field-hint"><strong>${esc(t('registrationPreviewUsersUrl'))}:</strong> <span id="registration-preview-url">${esc((selectedSite.replace(/\/$/, '') + '/register'))}</span></p>
+            <p class="field-hint"><strong>${esc(t('registrationPreviewServerDomain'))}:</strong> <span id="registration-preview-domain">${esc(serverDomain)}</span></p>
+          </div>
+        </div>`;
+        wireRegistrationForm(formEl);
+        return;
+      }
       if (step.id === 'nginx') {
         formEl.classList.remove('hidden');
         formEl.innerHTML = `<div class="form-stack">
@@ -2696,6 +2751,9 @@
         admin_email: g('admin_email')?.value || '',
         admin_password: g('admin_password')?.value || '',
         admin_password_confirm: g('admin_password_confirm')?.value || '',
+      };
+      if (stepId === 'registration') return {
+        registration_site: document.querySelector('input[name="registration_site"]:checked')?.value || 'https://rumble-msg.com',
       };
       if (stepId === 'nginx') return { certbot_email: g('certbot_email')?.value || '', domain: g('nginx_domain')?.value || '' };
       return {};

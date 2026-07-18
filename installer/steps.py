@@ -1448,6 +1448,176 @@ def apply_superuser(ctx: InstallerContext, payload: dict[str, Any]) -> StepResul
     return check_superuser(ctx)
 
 
+REGISTRATION_SITES = ["https://rumble-msg.com", "https://rmbl-msg.ru"]
+
+
+def _registration_url_for_site(site: str) -> str:
+    return site.rstrip("/") + "/register"
+
+
+def _known_registration_urls() -> list[str]:
+    return [_registration_url_for_site(site) for site in REGISTRATION_SITES]
+
+
+def _registration_site_from_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    normalized = url.rstrip("/")
+    for site in REGISTRATION_SITES:
+        if normalized == _registration_url_for_site(site):
+            return site
+    return None
+
+
+def _default_registration_payload(ctx: InstallerContext) -> dict[str, Any]:
+    saved_site = ctx.get("registration_site") or REGISTRATION_SITES[0]
+    return {
+        "registration_site": saved_site,
+        "sites": REGISTRATION_SITES,
+        "server_domain": ctx.get("domain") or "",
+    }
+
+
+def _read_appsettings_registration(ctx: InstallerContext) -> tuple[dict[str, Any] | None, StepResult | None]:
+    deploy = check_deploy(ctx)
+    if not deploy.ok:
+        return None, _fail(
+            "Complete the deploy step first.",
+            manual=deploy.manual,
+            cwd=deploy.cwd,
+            defaults=_default_registration_payload(ctx),
+        )
+
+    shell_script = (
+        "import json\n"
+        "from server.models import AppSettings\n"
+        "s = AppSettings.load()\n"
+        "print(json.dumps({"
+        "'users_registration_url': s.users_registration_url,"
+        "'server_domain': s.server_domain,"
+        "}))\n"
+    )
+    proc = ctx.run(
+        ctx.compose_base()
+        + ["exec", "-T", "web", "python", "manage.py", "shell", "-c", shell_script],
+        check=False,
+    )
+    if proc.returncode != 0:
+        return None, _fail(
+            "Could not read App Settings from the database.",
+            manual=(proc.stderr or proc.stdout or "Unknown error").strip(),
+            cwd=str(ctx.install_dir),
+            defaults=_default_registration_payload(ctx),
+        )
+
+    stdout = (proc.stdout or "").strip()
+    try:
+        last_line = stdout.splitlines()[-1] if stdout else ""
+        data = json.loads(last_line)
+    except (json.JSONDecodeError, IndexError):
+        return None, _fail(
+            "Could not parse App Settings from the server.",
+            manual=stdout or "Empty response from manage.py shell.",
+            cwd=str(ctx.install_dir),
+            defaults=_default_registration_payload(ctx),
+        )
+
+    if not isinstance(data, dict):
+        return None, _fail(
+            "Unexpected App Settings payload from the server.",
+            defaults=_default_registration_payload(ctx),
+        )
+    return data, None
+
+
+def check_registration(ctx: InstallerContext) -> StepResult:
+    defaults = _default_registration_payload(ctx)
+    data, err = _read_appsettings_registration(ctx)
+    if err:
+        return err
+
+    users_registration_url = (data or {}).get("users_registration_url") or ""
+    server_domain = (data or {}).get("server_domain") or ""
+    expected_domain = (ctx.get("domain") or "").strip()
+    known_urls = _known_registration_urls()
+
+    if users_registration_url not in known_urls:
+        return _fail(
+            "User registration site is not configured yet.",
+            manual="Choose the registration site below and run this step.",
+            defaults=defaults,
+        )
+    if not expected_domain:
+        return _fail(
+            "Server domain is not set — complete the .env step first.",
+            defaults=defaults,
+        )
+    if server_domain != expected_domain:
+        return _fail(
+            f"Server domain in App Settings is '{server_domain or '(empty)'}', expected '{expected_domain}'.",
+            manual="Run this step again to update App Settings.",
+            defaults={
+                **defaults,
+                "registration_site": _registration_site_from_url(users_registration_url)
+                or defaults["registration_site"],
+            },
+        )
+
+    registration_site = _registration_site_from_url(users_registration_url) or defaults["registration_site"]
+    ctx.set("registration_site", registration_site)
+    return _ok(
+        f"Registration site configured: {users_registration_url}, server domain: {server_domain}.",
+        defaults={
+            **defaults,
+            "registration_site": registration_site,
+            "users_registration_url": users_registration_url,
+        },
+    )
+
+
+def apply_registration(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
+    registration_site = (payload.get("registration_site") or ctx.get("registration_site") or "").strip()
+    if registration_site not in REGISTRATION_SITES:
+        return _fail(
+            "Choose a valid registration site.",
+            defaults=_default_registration_payload(ctx),
+        )
+
+    server_domain = (ctx.get("domain") or "").strip()
+    if not server_domain:
+        return _fail(
+            "Server domain is not set — complete the .env step first.",
+            defaults=_default_registration_payload(ctx),
+        )
+
+    users_registration_url = _registration_url_for_site(registration_site)
+    shell_script = (
+        "from server.models import AppSettings\n"
+        f"registration_url = {json.dumps(users_registration_url)}\n"
+        f"server_domain = {json.dumps(server_domain)}\n"
+        "settings = AppSettings.load()\n"
+        "settings.users_registration_url = registration_url\n"
+        "settings.server_domain = server_domain\n"
+        "settings.save()\n"
+        "print('ok')\n"
+    )
+    proc = ctx.run(
+        ctx.compose_base()
+        + ["exec", "-T", "web", "python", "manage.py", "shell", "-c", shell_script],
+        check=False,
+    )
+    if proc.returncode != 0:
+        return _fail(
+            "Failed to save App Settings.",
+            manual=(proc.stderr or proc.stdout or "Unknown error").strip(),
+            cwd=str(ctx.install_dir),
+            defaults=_default_registration_payload(ctx),
+        )
+
+    ctx.set("registration_site", registration_site)
+    return check_registration(ctx)
+
+
 def check_nginx(ctx: InstallerContext) -> StepResult:
     domain = (ctx.get("domain") or "").strip()
     if not domain:
@@ -1822,6 +1992,15 @@ STEPS: list[StepDef] = [
         apply=apply_superuser,
         needs_form=True,
         skip_manual="docker compose exec web python manage.py createsuperuser",
+    ),
+    StepDef(
+        id="registration",
+        title="User registration site",
+        description="Registration URL and server domain in App Settings",
+        check=check_registration,
+        apply=apply_registration,
+        needs_form=True,
+        skip_manual="In Django Admin -> App Settings set Users registration url and Server domain.",
     ),
     StepDef(
         id="nginx",
