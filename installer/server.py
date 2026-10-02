@@ -367,6 +367,16 @@ class InstallerHandler(BaseHTTPRequestHandler):
                         bucket_name=(payload.get("aws_storage_bucket_name") or "").strip(),
                         log=append_log,
                     )
+                    self.ctx.update(
+                        {
+                            "aws_access_key_id": result.get("aws_access_key_id", ""),
+                            "aws_secret_access_key": result.get("aws_secret_access_key", ""),
+                            "aws_storage_bucket_name": result.get("aws_storage_bucket_name", ""),
+                            "aws_s3_region_name": result.get("aws_s3_region_name", ""),
+                            "aws_s3_endpoint_url": result.get("aws_s3_endpoint_url", ""),
+                            "s3_vendor": "aws",
+                        }
+                    )
                 self._json_response(
                     HTTPStatus.OK,
                     {"ok": True, "message": "AWS S3 bucket and IAM user created.", **result},

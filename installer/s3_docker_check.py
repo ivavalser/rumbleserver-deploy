@@ -44,6 +44,12 @@ def main() -> None:
     addressing = os.environ.get("S3_ADDRESSING_STYLE", "auto")
     sig = os.environ.get("S3_SIGNATURE_VERSION", "s3v4")
 
+    after_provision = os.environ.get("INSTALLER_AFTER_PROVISION", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
     checks: list[dict[str, object]] = []
     bucket_region = region
 
@@ -101,10 +107,9 @@ def main() -> None:
             fail("AWS credentials are invalid or expired.", manual=message)
 
     def s3_client(region_name: str):
-        kwargs: dict = {"region_name": region_name}
-        if endpoint:
+        kwargs: dict = {"region_name": region_name, "config": config}
+        if vendor != "aws" and endpoint:
             kwargs["endpoint_url"] = endpoint
-        kwargs["config"] = config
         return session.client("s3", **kwargs)
 
     s3 = s3_client(region)
@@ -155,11 +160,15 @@ def main() -> None:
                     f"Bucket region: {bucket_region}. "
                     f"AWS: {code}: {message}"
                 ),
-                retryable=False,
+                retryable=after_provision,
             )
         fail(
             "ListBucket check failed.",
-            manual=f"{code}: {message}",
+            manual=(
+                f"{code}: {message}. "
+                f"Requested region: {region or '(empty)'}. "
+                f"Bucket region: {bucket_region}."
+            ),
         )
 
     test_key = f".installer-test-{secrets.token_hex(8)}"

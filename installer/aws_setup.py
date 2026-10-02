@@ -18,6 +18,34 @@ def _endpoint_for_region(region: str) -> str:
     return f"https://s3.{region}.amazonaws.com"
 
 
+def _normalize_bucket_region(location_constraint: str | None) -> str:
+    if not location_constraint:
+        return "us-east-1"
+    if location_constraint == "EU":
+        return "eu-west-1"
+    return location_constraint
+
+
+def _fetch_bucket_region(
+    *,
+    bucket: str,
+    env: dict[str, str],
+    log: Callable[[str], None],
+    aws_bin: str,
+) -> str:
+    raw = json.loads(
+        _run_aws(
+            ["s3api", "get-bucket-location", "--bucket", bucket],
+            env=env,
+            log=log,
+            aws_bin=aws_bin,
+        ).stdout
+    )
+    region = _normalize_bucket_region(raw.get("LocationConstraint"))
+    log(f"Bucket {bucket} is in region {region}.")
+    return region
+
+
 def _sanitize_bucket_name(name: str) -> str:
     name = name.lower().strip()
     name = re.sub(r"[^a-z0-9.-]", "-", name)
@@ -454,7 +482,7 @@ def provision_s3(
     region: str,
     bucket_name: str,
     log: Callable[[str], None],
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """Create bucket, block public access, IAM user + policy + access key."""
     bucket = _sanitize_bucket_name(bucket_name)
     if len(bucket) < 3:
@@ -476,15 +504,34 @@ def provision_s3(
         create_args.extend(
             ["--create-bucket-configuration", f"LocationConstraint={region}"]
         )
+    region_notice = ""
     try:
         _run_aws(create_args, env=env, log=log, aws_bin=aws_bin)
         log(f"Bucket {bucket} created.")
     except RuntimeError as exc:
         msg = str(exc)
-        if "BucketAlreadyOwnedByYou" in msg or "BucketAlreadyExists" in msg:
-            log(f"Bucket {bucket} already exists, continuing.")
+        if "BucketAlreadyExists" in msg and "BucketAlreadyOwnedByYou" not in msg:
+            raise RuntimeError(
+                f"Bucket name '{bucket}' is already taken by another AWS account. "
+                "Choose a different bucket name."
+            ) from exc
+        if "BucketAlreadyOwnedByYou" in msg:
+            log(f"Bucket {bucket} already exists in your account, continuing.")
         else:
             raise
+
+    actual_region = _fetch_bucket_region(
+        bucket=bucket,
+        env=env,
+        log=log,
+        aws_bin=aws_bin,
+    )
+    if actual_region != region:
+        region_notice = (
+            f"Bucket '{bucket}' already exists in region {actual_region}. "
+            f"S3 bucket region cannot be changed — use that region or pick a new bucket name."
+        )
+        log(region_notice)
 
     _run_aws(
         [
@@ -568,11 +615,14 @@ def provision_s3(
             aws_bin=aws_bin,
         )
 
-        return {
+        result: dict[str, Any] = {
             **key_pair,
             "aws_storage_bucket_name": bucket,
-            "aws_s3_region_name": region,
-            "aws_s3_endpoint_url": _endpoint_for_region(region),
+            "aws_s3_region_name": actual_region,
+            "aws_s3_endpoint_url": _endpoint_for_region(actual_region),
         }
+        if region_notice:
+            result["region_notice"] = region_notice
+        return result
     finally:
         Path(policy_file).unlink(missing_ok=True)

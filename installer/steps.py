@@ -648,6 +648,7 @@ def verify_s3_in_docker(
     vendor: str = "aws",
     addressing_style: str = "",
     signature_version: str = "",
+    after_provision: bool = False,
 ) -> dict[str, Any]:
     """Pull app image and verify S3 access inside the container (boto3 from image)."""
     if not access_key_id or not secret_access_key:
@@ -680,6 +681,7 @@ def verify_s3_in_docker(
         "S3_ADDRESSING_STYLE": addressing_style or "auto",
         "S3_SIGNATURE_VERSION": signature_version or "s3v4",
         "INSTALLER_S3_VENDOR": vendor,
+        "INSTALLER_AFTER_PROVISION": "1" if after_provision else "0",
     }
     docker_env: list[str] = []
     for key, value in env_overrides.items():
@@ -883,15 +885,19 @@ def check_aws_access(
     bucket = (
         data.get("aws_storage_bucket_name") or ctx.get("aws_storage_bucket_name") or ""
     ).strip()
-    endpoint = (
-        data.get("aws_s3_endpoint_url") or ctx.get("aws_s3_endpoint_url") or ""
-    ).strip()
+    if vendor == "aws":
+        endpoint = _endpoint_for_region(region)
+    else:
+        endpoint = (
+            data.get("aws_s3_endpoint_url") or ctx.get("aws_s3_endpoint_url") or ""
+        ).strip()
     addressing_style = (
         data.get("s3_addressing_style") or ctx.get("s3_addressing_style") or "auto"
     ).strip()
     signature_version = (
         data.get("s3_signature_version") or ctx.get("s3_signature_version") or "s3v4"
     ).strip()
+    after_provision = bool(data.get("after_aws_provision"))
 
     if not access_key or not secret:
         return _fail("Enter the S3 access key and secret first.")
@@ -899,8 +905,6 @@ def check_aws_access(
         return _fail("Enter the S3 bucket name first.")
     if vendor == "other" and not endpoint:
         return _fail("Enter the S3 endpoint URL for your provider.")
-    if vendor == "aws" and not endpoint:
-        endpoint = _endpoint_for_region(region)
 
     try:
         result = verify_s3_in_docker(
@@ -913,6 +917,7 @@ def check_aws_access(
             vendor=vendor,
             addressing_style=addressing_style,
             signature_version=signature_version,
+            after_provision=after_provision,
         )
     except Exception as exc:
         return _fail(str(exc))
@@ -920,6 +925,10 @@ def check_aws_access(
     if result.get("ok"):
         ctx.set("aws_verified", True)
         ctx.set("s3_vendor", vendor)
+        actual_region = (result.get("bucket_region") or region or "").strip()
+        if vendor == "aws" and actual_region:
+            ctx.set("aws_s3_region_name", actual_region)
+            ctx.set("aws_s3_endpoint_url", _endpoint_for_region(actual_region))
         return StepResult(
             ok=True,
             message=result.get("message", "S3 access verified."),
@@ -1243,11 +1252,11 @@ def apply_aws(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
         return _fail("S3 bucket name is required.")
 
     region = merged.get("aws_s3_region_name") or "eu-north-1"
-    endpoint = (merged.get("aws_s3_endpoint_url") or "").strip()
     if vendor == "other":
+        endpoint = (merged.get("aws_s3_endpoint_url") or "").strip()
         if not endpoint:
             return _fail("S3 endpoint URL is required for non-AWS providers.")
-    elif not endpoint:
+    else:
         endpoint = _endpoint_for_region(region)
 
     addressing_style = (merged.get("s3_addressing_style") or "auto").strip()
@@ -1269,6 +1278,15 @@ def apply_aws(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
     ctx.set("s3_vendor", vendor)
 
     verify = check_aws_access(ctx, {**merged, "aws_s3_endpoint_url": endpoint})
+    actual = (verify.data.get("bucket_region") or "").strip()
+    if verify.ok and vendor == "aws" and actual and actual != region:
+        env_payload.update(
+            {
+                "aws_s3_region_name": actual,
+                "aws_s3_endpoint_url": _endpoint_for_region(actual),
+            }
+        )
+        _write_env_file(ctx, env_payload)
     statuses = _aws_apply_statuses(ctx)
     data: dict[str, Any] = {
         "defaults": _default_aws_payload(ctx),

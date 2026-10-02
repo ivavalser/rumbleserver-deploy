@@ -789,6 +789,7 @@
         awsBootstrapKey: 'Bootstrap access key ID',
         awsBootstrapSecret: 'Bootstrap secret access key',
         awsRegion: 'Region',
+        awsRegionSynced: 'Bucket is in region {region} — the region field was updated to match.',
         awsBucket: 'Bucket name',
         awsAccessKey: 'App access key ID',
         awsSecretKey: 'App secret access key',
@@ -1007,6 +1008,7 @@
         awsBootstrapKey: 'Bootstrap Access Key ID',
         awsBootstrapSecret: 'Bootstrap Secret Access Key',
         awsRegion: 'Регион',
+        awsRegionSynced: 'Бакет в регионе {region} — поле региона обновлено.',
         awsBucket: 'Имя бакета',
         awsAccessKey: 'Access Key ID приложения',
         awsSecretKey: 'Secret Access Key приложения',
@@ -1729,10 +1731,24 @@
       }
     }
 
-    async function checkAwsAccessOnce() {
+    function setAwsRegionNotice(text) {
+      const el = document.getElementById('aws-region-notice');
+      if (!el) return;
+      if (text) {
+        el.textContent = text;
+        el.classList.remove('hidden');
+      } else {
+        el.textContent = '';
+        el.classList.add('hidden');
+      }
+    }
+
+    async function checkAwsAccessOnce(options = {}) {
+      const payload = collectPayload('aws');
+      if (options.afterProvision) payload.after_aws_provision = true;
       const res = await api('/api/step/aws/access-check', {
         method: 'POST',
-        body: JSON.stringify(collectPayload('aws')),
+        body: JSON.stringify(payload),
       });
       return await res.json();
     }
@@ -1741,7 +1757,10 @@
       const region = data?.data?.bucket_region;
       if (!region) return;
       const sel = document.getElementById('aws_s3_region_name');
-      if (sel && sel.value !== region) sel.value = region;
+      if (sel && sel.value !== region) {
+        sel.value = region;
+        setAwsRegionNotice(fmt(t('awsRegionSynced'), { region }));
+      }
       const other = document.getElementById('s3_other_region');
       if (other && other.value !== region) other.value = region;
     }
@@ -1803,7 +1822,9 @@
           'active',
         );
 
-        lastData = await checkAwsAccessOnce();
+        lastData = await checkAwsAccessOnce({
+          afterProvision: !!options.afterProvision,
+        });
         applyAwsBucketRegion(lastData);
         const isLastAttempt = attempt === maxAttempts;
         const canRetry = shouldRetryAwsVerify(lastData);
@@ -2433,6 +2454,7 @@
                   </label>
                   <label>${t('awsBucket')}<input type="text" id="aws_storage_bucket_name" autocomplete="off" value="${esc(a.aws_storage_bucket_name || suggestedBucket)}" placeholder="${esc(suggestedBucket || 'rmbl-myserver-prod')}"></label>
                 </div>
+                <p id="aws-region-notice" class="env-section-lead hidden" style="margin:8px 0 0"></p>
                 <div class="actions ${setupMode !== 'auto' ? 'hidden' : ''}" id="aws-flow-auto-actions" style="margin:16px 0 0">
                   <button type="button" class="btn primary" id="aws-provision-btn">${t('awsProvision')}</button>
                 </div>
@@ -2712,12 +2734,14 @@
           g('aws_secret_access_key').value = data.aws_secret_access_key || '';
           g('aws_storage_bucket_name').value = data.aws_storage_bucket_name || payload.aws_storage_bucket_name;
           if (data.aws_s3_region_name) g('aws_s3_region_name').value = data.aws_s3_region_name;
+          if (data.region_notice) setAwsRegionNotice(data.region_notice);
           showActionResult(data, false);
           setAwsFormBusy('verify');
           const verifyData = await checkAwsAccessWithRetry({
             initialDelayMs: 15000,
             maxAttempts: 6,
             retryDelayMs: 8000,
+            afterProvision: true,
           });
           if (verifyData.ok) {
             setAwsFormBusy(null);
