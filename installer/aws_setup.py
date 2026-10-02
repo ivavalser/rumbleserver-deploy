@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any, Callable
 
@@ -475,6 +476,78 @@ def _iam_policy_document(bucket: str) -> dict[str, Any]:
     }
 
 
+def _bucket_head_ok(
+    *,
+    bucket: str,
+    env: dict[str, str],
+    log: Callable[[str], None],
+    aws_bin: str,
+) -> bool:
+    proc = _run_aws(
+        ["s3api", "head-bucket", "--bucket", bucket],
+        env=env,
+        log=log,
+        aws_bin=aws_bin,
+        check=False,
+    )
+    return proc.returncode == 0
+
+
+def _ensure_s3_bucket(
+    *,
+    bucket: str,
+    region: str,
+    env: dict[str, str],
+    log: Callable[[str], None],
+    aws_bin: str,
+) -> None:
+    """Create bucket or continue if it already exists; retry AWS OperationAborted."""
+    create_args = ["s3api", "create-bucket", "--bucket", bucket, "--region", region]
+    if region != "us-east-1":
+        create_args.extend(
+            ["--create-bucket-configuration", f"LocationConstraint={region}"]
+        )
+
+    retry_delays_s = (15, 30, 45, 60)
+    last_exc: RuntimeError | None = None
+
+    for attempt in range(1 + len(retry_delays_s)):
+        if _bucket_head_ok(bucket=bucket, env=env, log=log, aws_bin=aws_bin):
+            log(f"Bucket {bucket} is already accessible, continuing.")
+            return
+        try:
+            _run_aws(create_args, env=env, log=log, aws_bin=aws_bin)
+            log(f"Bucket {bucket} created.")
+            return
+        except RuntimeError as exc:
+            last_exc = exc
+            msg = str(exc)
+            if "BucketAlreadyExists" in msg and "BucketAlreadyOwnedByYou" not in msg:
+                raise RuntimeError(
+                    f"Bucket name '{bucket}' is already taken by another AWS account. "
+                    "Choose a different bucket name."
+                ) from exc
+            if "BucketAlreadyOwnedByYou" in msg:
+                log(f"Bucket {bucket} already exists in your account, continuing.")
+                return
+            transient = (
+                "OperationAborted" in msg
+                or "conflicting conditional operation" in msg.lower()
+            )
+            if transient and attempt < len(retry_delays_s):
+                wait = retry_delays_s[attempt]
+                log(
+                    f"S3 create-bucket conflict (attempt {attempt + 1}) — "
+                    f"waiting {wait}s before retry…"
+                )
+                time.sleep(wait)
+                continue
+            raise
+
+    if last_exc:
+        raise last_exc
+
+
 def provision_s3(
     *,
     bootstrap_access_key: str,
@@ -499,26 +572,14 @@ def provision_s3(
 
     _run_aws(["sts", "get-caller-identity"], env=env, log=log, aws_bin=aws_bin)
 
-    create_args = ["s3api", "create-bucket", "--bucket", bucket, "--region", region]
-    if region != "us-east-1":
-        create_args.extend(
-            ["--create-bucket-configuration", f"LocationConstraint={region}"]
-        )
     region_notice = ""
-    try:
-        _run_aws(create_args, env=env, log=log, aws_bin=aws_bin)
-        log(f"Bucket {bucket} created.")
-    except RuntimeError as exc:
-        msg = str(exc)
-        if "BucketAlreadyExists" in msg and "BucketAlreadyOwnedByYou" not in msg:
-            raise RuntimeError(
-                f"Bucket name '{bucket}' is already taken by another AWS account. "
-                "Choose a different bucket name."
-            ) from exc
-        if "BucketAlreadyOwnedByYou" in msg:
-            log(f"Bucket {bucket} already exists in your account, continuing.")
-        else:
-            raise
+    _ensure_s3_bucket(
+        bucket=bucket,
+        region=region,
+        env=env,
+        log=log,
+        aws_bin=aws_bin,
+    )
 
     actual_region = _fetch_bucket_region(
         bucket=bucket,
