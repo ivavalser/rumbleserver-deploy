@@ -53,8 +53,42 @@ elif ! grep -q "$REGISTRY" "${DOCKER_CONFIG:-$HOME/.docker}/config.json" 2>/dev/
     echo "$RUMBLE_KEY" | docker login "$REGISTRY" -u "$GHCR_USER" --password-stdin
 fi
 
-if [ -x ./setup-turn.sh ] && grep -qE '^(TURN_AUTO_SETUP=(true|1)|COTURN_AUTH_SECRET=.+)' .env 2>/dev/null; then
-    ./setup-turn.sh --quiet || echo "⚠️  setup-turn.sh failed — fix TURN settings in .env and retry."
+_rmbl_prod_domain() {
+    local d allowed part
+    d="$(grep -E '^TURN_REALM=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]')"
+    if [ -n "$d" ]; then
+        echo "$d"
+        return
+    fi
+    allowed="$(grep -E '^ALLOWED_HOSTS=' .env 2>/dev/null | head -1 | cut -d= -f2-)"
+    IFS=',' read -ra parts <<< "$allowed"
+    for part in "${parts[@]}"; do
+        part="${part#"${part%%[![:space:]]*}"}"
+        part="${part%"${part##*[![:space:]]}"}"
+        if [ -n "$part" ] && [ "$part" != "localhost" ] && [ "$part" != "127.0.0.1" ]; then
+            echo "$part"
+            return
+        fi
+    done
+}
+
+_run_setup_turn=0
+_setup_turn_args=()
+if [ -x ./setup-turn.sh ] && ! grep -qE '^TURN_AUTO_SETUP=false' .env 2>/dev/null; then
+    if grep -qE '^COTURN_AUTH_SECRET=.+' .env 2>/dev/null || grep -qE '^TURN_AUTO_SETUP=(true|1)' .env 2>/dev/null; then
+        _run_setup_turn=1
+        _setup_turn_args=(--quiet)
+    else
+        _domain="$(_rmbl_prod_domain)"
+        if [ -n "$_domain" ] && [ -f "/etc/letsencrypt/live/${_domain}/fullchain.pem" ]; then
+            echo "🔀 HTTPS для ${_domain} — настраиваю TURN автоматически (TURN_AUTO_SETUP=false в .env чтобы отключить)"
+            _run_setup_turn=1
+            _setup_turn_args=(--auto --quiet)
+        fi
+    fi
+fi
+if [ "$_run_setup_turn" -eq 1 ]; then
+    ./setup-turn.sh "${_setup_turn_args[@]}" || echo "⚠️  setup-turn.sh failed — fix TURN settings in .env and retry."
 fi
 
 COMPOSE="$DOCKER_COMPOSE --env-file .env -f docker-compose.yml"
@@ -77,7 +111,7 @@ VERSION="${VERSION:-stable}" COMPOSE_PROFILES="$COMPOSE_PROFILES" $COMPOSE up -d
 
 echo ""
 echo "📊 Статус:"
-$COMPOSE ps
+VERSION="${VERSION:-stable}" COMPOSE_PROFILES="$COMPOSE_PROFILES" $COMPOSE ps
 
 echo ""
-echo "✅ Готово. Логи: $COMPOSE logs -f web"
+echo "✅ Готово. Логи: COMPOSE_PROFILES=\"$COMPOSE_PROFILES\" $COMPOSE logs -f web"

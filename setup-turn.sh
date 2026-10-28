@@ -5,10 +5,12 @@ set -euo pipefail
 
 QUIET=0
 FROM_INSTALLER=0
+AUTO_PROD=0
 for arg in "$@"; do
   case "$arg" in
     --quiet) QUIET=1 ;;
     --from-installer) FROM_INSTALLER=1 ;;
+    --auto) AUTO_PROD=1 ;;
   esac
 done
 
@@ -98,18 +100,35 @@ coturn_urls() {
 AUTO="$(env_get TURN_AUTO_SETUP)"
 SECRET="$(env_get COTURN_AUTH_SECRET)"
 
-if [ "$FROM_INSTALLER" -eq 0 ] && [ "$AUTO" != "true" ] && [ "$AUTO" != "1" ] && [ -z "$SECRET" ]; then
-  log "setup-turn: skipped (set TURN_AUTO_SETUP=true or COTURN_AUTH_SECRET in .env)"
+if [ "$AUTO" = "false" ]; then
+  log "setup-turn: skipped (TURN_AUTO_SETUP=false)"
   exit 0
 fi
 
 DOMAIN="$(domain_from_env)"
+LE_CERT="/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"
+
+RUN=0
+if [ "$FROM_INSTALLER" -eq 1 ]; then
+  RUN=1
+elif [ -n "$SECRET" ]; then
+  RUN=1
+elif [ "$AUTO" = "true" ] || [ "$AUTO" = "1" ]; then
+  RUN=1
+elif [ "$AUTO_PROD" -eq 1 ] && [ -n "$DOMAIN" ] && [ -f "$LE_CERT" ]; then
+  RUN=1
+  log "setup-turn: auto (HTTPS + domain ${DOMAIN})"
+fi
+
+if [ "$RUN" -eq 0 ]; then
+  exit 0
+fi
+
 if [ -z "$DOMAIN" ]; then
   warn "setup-turn: could not determine domain (ALLOWED_HOSTS / TURN_REALM)"
   exit 1
 fi
 
-LE_CERT="/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"
 if [ "$FROM_INSTALLER" -eq 1 ] && [ ! -f "$LE_CERT" ]; then
   warn "setup-turn: Let's Encrypt cert not found at $LE_CERT (complete HTTPS first)"
   exit 1
@@ -155,7 +174,7 @@ if [ -n "$TURN_PRIVATE" ]; then
 elif grep -qE '^TURN_PRIVATE_IP=' "$ENV_FILE"; then
   env_upsert TURN_PRIVATE_IP ""
 fi
-if [ "$AUTO" = "true" ] || [ "$AUTO" = "1" ] || [ "$FROM_INSTALLER" -eq 1 ]; then
+if [ "$AUTO" = "true" ] || [ "$AUTO" = "1" ] || [ "$FROM_INSTALLER" -eq 1 ] || [ "$AUTO_PROD" -eq 1 ]; then
   env_upsert TURN_AUTO_SETUP true
 fi
 
