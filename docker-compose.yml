@@ -1,5 +1,13 @@
 # Operator compose: готовый образ из GHCR, без исходников на диске.
 # Версия: VERSION=stable (по умолчанию) или VERSION=1.0.0
+#
+# FEATURE_* по умолчанию в образе (Dockerfile); блок ниже — optional override через .env при парсинге compose.
+
+x-rmbl-app-features: &rmbl_app_features
+  FEATURE_DEVICE_KEY_SYNC_SIGNALING: ${FEATURE_DEVICE_KEY_SYNC_SIGNALING:-true}
+  FEATURE_PRIMARY_DEVICE: ${FEATURE_PRIMARY_DEVICE:-true}
+  FEATURE_TURN_CREDENTIALS: ${FEATURE_TURN_CREDENTIALS:-true}
+  FEATURE_ATOMIC_SENDER_MESSAGE_INDEX: ${FEATURE_ATOMIC_SENDER_MESSAGE_INDEX:-true}
 
 services:
   db:
@@ -56,6 +64,8 @@ services:
       DB_HOST: db
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      SERVER_VERSION: ${VERSION:-stable}
+      <<: *rmbl_app_features
     depends_on:
       db:
         condition: service_healthy
@@ -75,6 +85,7 @@ services:
       DB_HOST: db
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      <<: *rmbl_app_features
     depends_on:
       - db
       - redis
@@ -99,6 +110,24 @@ services:
       - web
     networks:
       - rumbleserver_network
+    restart: unless-stopped
+
+  coturn:
+    profiles: ["turn"]
+    image: coturn/coturn:4.6.3
+    container_name: rumbleserver_coturn
+    network_mode: host
+    entrypoint: ["/bin/sh", "/coturn/entrypoint.sh"]
+    environment:
+      COTURN_AUTH_SECRET: ${COTURN_AUTH_SECRET:-}
+      TURN_REALM: ${TURN_REALM:-}
+      TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP:-}
+      TURN_PRIVATE_IP: ${TURN_PRIVATE_IP:-}
+      TURN_MIN_PORT: ${TURN_MIN_PORT:-49160}
+      TURN_MAX_PORT: ${TURN_MAX_PORT:-49200}
+    volumes:
+      - ./coturn/entrypoint.sh:/coturn/entrypoint.sh:ro
+      - ./coturn/certs:/certs:ro
     restart: unless-stopped
 
 volumes:

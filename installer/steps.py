@@ -98,6 +98,8 @@ class InstallerContext:
             domain = _domain_from_allowed_hosts(allowed)
             if domain:
                 updates["domain"] = domain
+        if _env_value(text, "COTURN_AUTH_SECRET") and not self.get("turn_enabled"):
+            updates["turn_enabled"] = True
         if updates:
             self._state.update(updates)
             self.save_state()
@@ -182,6 +184,8 @@ class InstallerContext:
             profiles.append("local-db")
         if not self.get("use_external_redis"):
             profiles.append("local-redis")
+        if self.get("turn_enabled"):
+            profiles.append("turn")
         return profiles
 
     def compose_base(self) -> list[str]:
@@ -750,6 +754,49 @@ def _health_check_host(ctx: InstallerContext) -> str:
     return _domain_from_allowed_hosts(allowed) or "localhost"
 
 
+_TURN_PRESERVE_ENV_KEYS = (
+    "TURN_AUTO_SETUP",
+    "FEATURE_TURN_CREDENTIALS",
+    "COTURN_AUTH_SECRET",
+    "COTURN_URLS",
+    "COTURN_CREDENTIAL_TTL_SECONDS",
+    "TURN_REALM",
+    "TURN_EXTERNAL_IP",
+    "TURN_PRIVATE_IP",
+    "TURN_MIN_PORT",
+    "TURN_MAX_PORT",
+)
+
+
+def _upsert_env_file(path: Path, updates: dict[str, str]) -> None:
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    lines = text.splitlines()
+    seen: set[str] = set()
+    new_lines: list[str] = []
+    for line in lines:
+        matched = False
+        for key, val in updates.items():
+            if line.startswith(f"{key}="):
+                new_lines.append(f"{key}={val}")
+                seen.add(key)
+                matched = True
+                break
+        if not matched:
+            new_lines.append(line)
+    for key, val in updates.items():
+        if key not in seen:
+            new_lines.append(f"{key}={val}")
+    path.write_text("\n".join(new_lines).rstrip() + "\n", encoding="utf-8")
+
+
+def _ufw_has_turn_rules(ctx: InstallerContext) -> bool:
+    if not shutil.which("ufw"):
+        return True
+    status = ctx.run(["ufw", "status"], check=False)
+    text = (status.stdout or "") + (status.stderr or "")
+    return "3478" in text and "5349" in text and "49160" in text
+
+
 def _env_value(text: str, key: str) -> str:
     prefix = f"{key}="
     for line in text.splitlines():
@@ -1075,6 +1122,15 @@ def _write_env_file(ctx: InstallerContext, payload: dict[str, Any]) -> None:
         *s3_lines,
         "",
     ]
+    if ctx.env_path.exists():
+        old_text = ctx.env_path.read_text(encoding="utf-8")
+        turn_lines = []
+        for key in _TURN_PRESERVE_ENV_KEYS:
+            val = _env_value(old_text, key)
+            if val:
+                turn_lines.append(f"{key}={val}")
+        if turn_lines:
+            lines.extend(["# TURN (preserved from previous .env)", *turn_lines, ""])
     ctx.env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     ctx.log(f"Wrote {ctx.env_path}")
 
@@ -1858,6 +1914,106 @@ def apply_nginx(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
     return check_nginx(ctx)
 
 
+def check_turn(ctx: InstallerContext) -> StepResult:
+    if not ctx.get("turn_enabled"):
+        return _fail(
+            "WebRTC TURN is not configured yet.",
+            manual=f"Run the TURN step or set COTURN_* in {ctx.env_path} and ./prod.sh",
+            cwd=str(ctx.install_dir),
+        )
+    if not ctx.env_path.exists():
+        return _fail("Complete the .env step first.")
+    text = ctx.env_path.read_text(encoding="utf-8")
+    for key in ("COTURN_AUTH_SECRET", "COTURN_URLS", "TURN_REALM", "TURN_EXTERNAL_IP"):
+        if not _env_value(text, key):
+            return _fail(f".env is missing {key}.")
+    domain = (ctx.get("domain") or _env_value(text, "TURN_REALM")).strip()
+    certs_dir = ctx.install_dir / "coturn" / "certs"
+    if not (certs_dir / "fullchain.pem").exists() or not (certs_dir / "privkey.pem").exists():
+        return _fail(
+            "TLS cert copies for coturn are missing.",
+            manual=f"Run: RENEWED_DOMAINS={domain} /etc/letsencrypt/renewal-hooks/deploy/rumble-coturn.sh",
+        )
+    if not _ufw_has_turn_rules(ctx):
+        return _fail(
+            "UFW does not list TURN ports (3478, 5349, 49160:49200).",
+            manual="sudo ufw allow 3478/udp && sudo ufw allow 3478/tcp && sudo ufw allow 5349/tcp && sudo ufw allow 49160:49200/udp",
+        )
+    ps = ctx.run(ctx.compose_base() + ["ps", "--format", "json"], check=False)
+    running = _parse_compose_ps(ps.stdout or "")
+    if running.get("rumbleserver_coturn", "").lower() != "running":
+        return _fail(
+            "Container rumbleserver_coturn is not running.",
+            manual=f"cd {ctx.install_dir} && {' '.join(ctx.compose_base())} up -d",
+            cwd=str(ctx.install_dir),
+        )
+    cap = ctx.run(
+        ctx.compose_base()
+        + [
+            "exec",
+            "-T",
+            "web",
+            "python",
+            "manage.py",
+            "shell",
+            "-c",
+            "from server.views import build_server_capabilities_payload as b; print(b()['features']['turn_credentials'])",
+        ],
+        check=False,
+    )
+    turn_flag = (cap.stdout or "").strip().splitlines()[-1] if cap.stdout else ""
+    if turn_flag != "True":
+        return _fail(
+            "Server reports turn_credentials=false — check COTURN_AUTH_SECRET and COTURN_URLS in .env.",
+            manual=cap.stderr or cap.stdout,
+        )
+    return _ok(
+        "TURN relay is running; API turn_credentials=true. "
+        "Open the same ports in your cloud security group if clients still fail to get relay candidates."
+    )
+
+
+def apply_turn(ctx: InstallerContext, _payload: dict[str, Any]) -> StepResult:
+    domain = (ctx.get("domain") or "").strip()
+    if not domain:
+        return _fail("Domain not set — complete the .env step first.")
+    le_cert = Path(f"/etc/letsencrypt/live/{domain}/fullchain.pem")
+    if not le_cert.exists():
+        return _fail(
+            "Let's Encrypt certificate not found.",
+            manual=f"Complete the Nginx and HTTPS step first (expected {le_cert}).",
+        )
+    setup_script = ctx.install_dir / "setup-turn.sh"
+    if not setup_script.is_file():
+        return _fail(
+            "setup-turn.sh is missing from the install directory.",
+            manual=f"Update the deploy bundle (git pull) so {setup_script} exists.",
+            cwd=str(ctx.install_dir),
+        )
+    ctx.log("Running setup-turn.sh...")
+    proc = ctx.run(["/bin/sh", str(setup_script), "--from-installer"], check=False)
+    if proc.returncode != 0:
+        return _fail(
+            "setup-turn.sh failed.",
+            manual=proc.stderr or proc.stdout or f"Run: sh {setup_script} --from-installer",
+            cwd=str(ctx.install_dir),
+        )
+
+    ctx.set("turn_enabled", True)
+    ctx.log("Starting coturn and reloading app containers...")
+    ctx.run(ctx.compose_base() + ["up", "-d"])
+
+    import time
+
+    for attempt in range(1, 31):
+        result = check_turn(ctx)
+        if result.ok:
+            return result
+        ctx.log(f"TURN check attempt {attempt}/30 — {result.message}")
+        time.sleep(2)
+    return check_turn(ctx)
+
+
 def _parse_compose_ps(stdout: str) -> dict[str, str]:
     states: dict[str, str] = {}
     for line in stdout.strip().splitlines():
@@ -1888,6 +2044,8 @@ def _finish_service_checks(ctx: InstallerContext) -> list[dict[str, Any]]:
             ("rumbleserver_push_worker", "Push worker"),
         ]
     )
+    if ctx.get("turn_enabled"):
+        expected.append(("rumbleserver_coturn", "TURN relay (coturn)"))
 
     ps = ctx.run(ctx.compose_base() + ["ps", "--format", "json"], check=False)
     running = _parse_compose_ps(ps.stdout or "")
@@ -2116,6 +2274,17 @@ STEPS: list[StepDef] = [
         apply=apply_nginx,
         needs_form=True,
         skip_manual="Follow the Nginx and HTTPS section in DEPLOY.md",
+    ),
+    StepDef(
+        id="turn",
+        title="WebRTC relay (TURN)",
+        description="coturn for cross-network device key sync",
+        check=check_turn,
+        apply=apply_turn,
+        skip_manual=(
+            "Configure coturn manually: set COTURN_* and TURN_* in .env, copy LE certs to coturn/certs/, "
+            "open 3478/udp+tcp, 5349/tcp, relay UDP range, then ./prod.sh with turn profile."
+        ),
     ),
     StepDef(
         id="finish",

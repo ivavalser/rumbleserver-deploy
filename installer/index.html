@@ -798,6 +798,11 @@
         deployStarting: 'Starting services…',
         deployWaiting: 'Waiting for application to start…',
         nginxWorking: 'Setting up Nginx and HTTPS…',
+        turnWorking: 'Setting up WebRTC TURN relay…',
+        busyTurn: 'Configuring coturn and firewall',
+        turnFirewall: 'Opening TURN ports in UFW…',
+        turnCerts: 'Copying TLS certs for coturn…',
+        turnStarting: 'Starting coturn container…',
         nginxInstalling: 'Installing Nginx and Certbot…',
         nginxConfiguring: 'Writing Nginx configuration…',
         nginxCertbot: 'Obtaining HTTPS certificate…',
@@ -1017,6 +1022,11 @@
         deployStarting: 'Запускаем сервисы…',
         deployWaiting: 'Ждём запуск приложения…',
         nginxWorking: 'Настраиваем Nginx и HTTPS…',
+        turnWorking: 'Настраиваем WebRTC TURN…',
+        busyTurn: 'Настраиваем coturn и файрвол',
+        turnFirewall: 'Открываем порты TURN в UFW…',
+        turnCerts: 'Копируем TLS-сертификаты для coturn…',
+        turnStarting: 'Запускаем контейнер coturn…',
         nginxInstalling: 'Устанавливаем Nginx и Certbot…',
         nginxConfiguring: 'Пишем конфигурацию Nginx…',
         nginxCertbot: 'Получаем HTTPS-сертификат…',
@@ -1084,6 +1094,7 @@
         superuser: { title: 'Django Admin account', desc: 'First superuser', pending: 'Create the first Django Admin superuser account.', mascot: 'We create a Django Admin superuser — this is the internal server panel, not a messenger account. Pick a strong password and keep it safe.' },
         registration: { title: 'User registration site', desc: 'Registration URL and server domain', pending: 'Choose the public site where your users will register. Optionally set a friendly server name.', mascot: 'Invitations and client apps send new users to the RMBL website to sign up. Pick rumble-msg.com or rmbl-msg.ru — I will save the registration URL and your server domain in App Settings. If you add a server name, I will also generate a local network access key for future federation.' },
         nginx: { title: 'Nginx and HTTPS', desc: 'Reverse proxy and Let\'s Encrypt', pending: 'Set up Nginx, obtain an HTTPS certificate, and connect your domain.', mascot: 'I install Nginx and get a free HTTPS certificate from Let\'s Encrypt. Without HTTPS browsers and apps will not trust your server.' },
+        turn: { title: 'WebRTC relay (TURN)', desc: 'coturn for cross-network device key sync', pending: 'Start coturn, open firewall ports, and enable TURN credentials for clients.', mascot: 'Device linking uses WebRTC. When a phone is on LTE and a browser is on Wi‑Fi, STUN alone often fails — I run coturn on this server so clients can relay through you safely.' },
         finish: { title: 'Installation complete', desc: 'Summary and next steps', pending: 'Review the installation summary.', mascot: 'We did it! Below is a health check of every service. When you are satisfied, finish to close the installer — your server keeps running.' },
       },
       ru: {
@@ -1097,6 +1108,7 @@
         superuser: { title: 'Учётная запись Django Admin', desc: 'Первый суперпользователь', pending: 'Создаём первого суперпользователя Django Admin.', mascot: 'Создаём суперпользователя Django Admin — это внутренняя панель сервера, не аккаунт в мессенджере. Задай надёжный пароль и сохрани его.' },
         registration: { title: 'Сайт регистрации пользователей', desc: 'URL регистрации и домен сервера', pending: 'Выбери публичный сайт для регистрации пользователей. По желанию задай красивое название сервера.', mascot: 'Приглашения и клиенты отправляют новых пользователей на сайт RMBL для регистрации. Выбери rumble-msg.com или rmbl-msg.ru — я сохраню URL регистрации и домен сервера в App Settings. Если укажешь название сервера, также сгенерирую ключ локальной сети для будущей федерации.' },
         nginx: { title: 'Nginx и HTTPS', desc: 'Обратный прокси и Let\'s Encrypt', pending: 'Настраиваем Nginx, получаем HTTPS-сертификат и привязываем домен.', mascot: 'Ставлю Nginx и получаю бесплатный HTTPS-сертификат от Let\'s Encrypt. Без HTTPS браузеры и клиенты не будут доверять серверу.' },
+        turn: { title: 'WebRTC relay (TURN)', desc: 'coturn для синхронизации ключей между сетями', pending: 'Запускаем coturn, открываем порты и включаем TURN credentials для клиентов.', mascot: 'Привязка устройств идёт через WebRTC. Если телефон на LTE, а браузер на Wi‑Fi, одного STUN часто мало — подниму coturn на этом сервере, чтобы клиенты могли безопасно ретранслировать трафик.' },
         finish: { title: 'Установка завершена', desc: 'Итоги и следующие шаги', pending: 'Просмотри сводку по установке.', mascot: 'Готово! Ниже — проверка всех сервисов. Когда всё устроит, заверши установку — сервер продолжит работать, а мастер закроется.' },
       },
     };
@@ -1112,8 +1124,8 @@
       return formStepsSet().has(stepId);
     }
 
-    const BUILD_MASCOT_STEPS = new Set(['deploy', 'nginx']);
-    const SKIP_ALLOWED_STEPS = new Set(['system', 'ufw', 'superuser', 'nginx']);
+    const BUILD_MASCOT_STEPS = new Set(['deploy', 'nginx', 'turn']);
+    const SKIP_ALLOWED_STEPS = new Set(['system', 'ufw', 'superuser', 'nginx', 'turn']);
 
     let lang = localStorage.getItem('installer_lang') || 'en';
     const params = new URLSearchParams(location.search);
@@ -1128,6 +1140,7 @@
       system: 'busySystem', ufw: 'busyUfw', docker: 'busyDocker', ghcr: 'busyGhcr',
       env: 'busyEnv', deploy: 'busyDeploy', superuser: 'busySuperuser', registration: 'busyRegistration',
       nginx: 'nginxWorking',
+      turn: 'turnWorking',
     };
 
     function mascotAsset(stepId) {
@@ -1611,6 +1624,16 @@
           stepBusyPhase = t('nginxConfiguring');
         } else if (text.includes('Installing Nginx') || text.includes('apt-get')) {
           stepBusyPhase = t('nginxInstalling');
+        }
+      } else if (currentStepId === 'turn') {
+        if (text.includes('TURN check attempt') || text.includes('turn_credentials')) {
+          stepBusyPhase = t('turnStarting');
+        } else if (text.includes('certbot deploy hook') || text.includes('rumble-coturn')) {
+          stepBusyPhase = t('turnCerts');
+        } else if (text.includes('UFW ports') || text.includes('ufw allow')) {
+          stepBusyPhase = t('turnFirewall');
+        } else if (text.includes('coturn') || text.includes('TURN settings')) {
+          stepBusyPhase = t('busyTurn');
         }
       }
       syncStepBusyOverlay();

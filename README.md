@@ -92,7 +92,12 @@ Open the link in your browser — the step-by-step wizard walks you through:
 9. Django Admin superuser creation
 10. User registration site — choose `rumble-msg.com` or `rmbl-msg.ru`, set server domain in App Settings; optional server name and local network access key
 11. Nginx + Let's Encrypt HTTPS (domain already set)
-12. Final summary and health checks
+12. **WebRTC relay (TURN)** — optional but recommended for multi-device key sync across networks (coturn, UFW ports, cert copy). Skippable if you configure TURN manually.
+13. Final summary and health checks
+
+**TURN firewall** (host + cloud security group when coturn is enabled): **3478/udp+tcp**, **5349/tcp**, relay UDP **49160:49200** (default). Compose profile: `--profile turn` (included automatically by `./prod.sh` when `COTURN_AUTH_SECRET` is set).
+
+On existing servers after `git pull`: add **`TURN_AUTO_SETUP=true`** to `.env`, then **`./prod.sh`** — runs `setup-turn.sh` (secrets, UFW, cert copy, hook) and starts coturn. Security group ports are still manual.
 
 At each step the installer **tries to do the work itself first**. If something fails — it shows exactly what to run and in which directory. The **“I did it — verify”** button re-checks the step.
 
@@ -233,7 +238,12 @@ curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/
 9. Создание Django Admin суперпользователя
 10. Сайт регистрации пользователей — выбор `rumble-msg.com` или `rmbl-msg.ru`, домен сервера в App Settings; по желанию название сервера и ключ локальной сети
 11. Nginx + Let's Encrypt HTTPS (домен уже задан)
-12. Финальная сводка и проверки сервисов
+12. **WebRTC relay (TURN)** — рекомендуется для синхронизации ключей между сетями (coturn, UFW, копия сертификата). Можно пропустить при ручной настройке TURN.
+13. Финальная сводка и проверки сервисов
+
+**Порты TURN** (хост + security group в облаке): **3478/udp+tcp**, **5349/tcp**, relay UDP **49160:49200**. Профиль compose `--profile turn` ( `./prod.sh` добавляет его при непустом `COTURN_AUTH_SECRET`).
+
+На уже работающем сервере после `git pull`: **`TURN_AUTO_SETUP=true`** в `.env`, затем **`./prod.sh`** — `setup-turn.sh` и coturn. Security group в облаке — вручную.
 
 На каждом шаге установщик **сначала пробует сделать сам**. Если не получилось — показывает, что именно выполнить и в какой директории. Кнопка **«Я сделал — проверить»** перепроверяет шаг.
 

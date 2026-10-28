@@ -53,8 +53,21 @@ elif ! grep -q "$REGISTRY" "${DOCKER_CONFIG:-$HOME/.docker}/config.json" 2>/dev/
     echo "$RUMBLE_KEY" | docker login "$REGISTRY" -u "$GHCR_USER" --password-stdin
 fi
 
+if [ -x ./setup-turn.sh ] && grep -qE '^(TURN_AUTO_SETUP=(true|1)|COTURN_AUTH_SECRET=.+)' .env 2>/dev/null; then
+    ./setup-turn.sh --quiet || echo "⚠️  setup-turn.sh failed — fix TURN settings in .env and retry."
+fi
+
 COMPOSE="$DOCKER_COMPOSE --env-file .env -f docker-compose.yml"
 COMPOSE_PROFILES="${COMPOSE_PROFILES:-local-db,local-redis}"
+if grep -qE '^COTURN_AUTH_SECRET=.+' .env 2>/dev/null; then
+    case ",${COMPOSE_PROFILES}," in
+        *,turn,*) ;;
+        *) COMPOSE_PROFILES="${COMPOSE_PROFILES},turn" ;;
+    esac
+    if [ ! -f coturn/certs/fullchain.pem ]; then
+        echo "⚠️  coturn/certs/fullchain.pem missing — coturn runs without TLS (turns:5349 off until cert hook runs)."
+    fi
+fi
 
 echo "⬇️  Подтягиваю образ (VERSION=${VERSION:-stable})..."
 VERSION="${VERSION:-stable}" COMPOSE_PROFILES="$COMPOSE_PROFILES" $COMPOSE pull
