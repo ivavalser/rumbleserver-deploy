@@ -3,7 +3,7 @@ set -e
 
 # Деплой и обновление Rumble Server из готового образа GHCR.
 # Использование:
-#   ./prod.sh                  # VERSION из .env, иначе stable
+#   ./prod.sh                  # версия stable
 #   VERSION=1.0.0 ./prod.sh    # конкретная версия / откат
 #   RUMBLE_KEY=xxx ./prod.sh   # перелогиниться новым ключом
 
@@ -107,20 +107,15 @@ if grep -qE '^COTURN_AUTH_SECRET=.+' .env 2>/dev/null; then
     fi
 fi
 
-if [ -z "${VERSION:-}" ]; then
-    VERSION="$(grep -E '^VERSION=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]' || true)"
-fi
-VERSION="${VERSION:-stable}"
-
-echo "⬇️  Подтягиваю образ (VERSION=${VERSION})..."
-VERSION="$VERSION" COMPOSE_PROFILES="$COMPOSE_PROFILES" $COMPOSE pull
+echo "⬇️  Подтягиваю образ (VERSION=${VERSION:-stable})..."
+VERSION="${VERSION:-stable}" COMPOSE_PROFILES="$COMPOSE_PROFILES" $COMPOSE pull
 
 echo "▶️  Запускаю сервисы..."
-VERSION="$VERSION" COMPOSE_PROFILES="$COMPOSE_PROFILES" $COMPOSE up -d
+VERSION="${VERSION:-stable}" COMPOSE_PROFILES="$COMPOSE_PROFILES" $COMPOSE up -d
 
 echo ""
 echo "📊 Статус:"
-VERSION="$VERSION" COMPOSE_PROFILES="$COMPOSE_PROFILES" $COMPOSE ps
+VERSION="${VERSION:-stable}" COMPOSE_PROFILES="$COMPOSE_PROFILES" $COMPOSE ps
 
 echo ""
 echo "✅ Готово. Логи: COMPOSE_PROFILES=\"$COMPOSE_PROFILES\" $COMPOSE logs -f web"

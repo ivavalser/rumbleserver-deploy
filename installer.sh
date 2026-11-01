@@ -6,9 +6,8 @@ set -e
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/installer.sh | sudo bash
 #
-# Custom dir / branch / image tag (sudo resets env — use env):
+# Custom dir / branch (sudo resets env — use env):
 #   curl -fsSL .../installer.sh | sudo env RUMBLE_DEPLOY_BRANCH=feat/installer bash
-#   curl -fsSL .../installer.sh | sudo env RUMBLE_VERSION=1.2.3 bash
 #
 # Restart / update installer (on VPS):
 #
@@ -24,7 +23,6 @@ set -e
 INSTALL_DIR="${RUMBLE_DIR:-$HOME/rumbleserver}"
 DEPLOY_REPO="${RUMBLE_DEPLOY_REPO:-https://github.com/ivavalser/rumbleserver-deploy.git}"
 DEPLOY_BRANCH="${RUMBLE_DEPLOY_BRANCH:-main}"
-IMAGE_VERSION="${RUMBLE_VERSION:-}"
 INSTALLER_PORT="${INSTALLER_PORT:-8800}"
 PID_FILE="${INSTALL_DIR}/.installer.pid"
 TOKEN_FILE="${INSTALL_DIR}/.installer.token"
@@ -188,10 +186,6 @@ fi
 export RUMBLE_INSTALL_DIR="$INSTALL_DIR"
 export RUMBLE_INSTALLER_TOKEN="$TOKEN"
 export RUMBLE_INSTALLER_PORT="$INSTALLER_PORT"
-if [ -n "$IMAGE_VERSION" ]; then
-    export RUMBLE_VERSION="$IMAGE_VERSION"
-    echo "📌 Image tag: ${IMAGE_VERSION}"
-fi
 export PATH="/usr/local/bin:/usr/local/aws-cli/v2/current/bin:${PATH:-/usr/bin:/bin}"
 
 echo "▶️  Starting web installer on port ${INSTALLER_PORT}..."

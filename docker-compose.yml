@@ -57,7 +57,7 @@ services:
     volumes:
       - static_volume:/app/staticfiles
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:${WEB_PORT:-8000}:8000"
     env_file:
       - .env
     environment:

@@ -6,7 +6,6 @@ set -e
 # Usage:
 #   ./install-remote.sh root@167.233.165.200
 #   ./install-remote.sh root@167.233.165.200 feat/installer
-#   RUMBLE_VERSION=1.2.3 ./install-remote.sh root@167.233.165.200
 #
 # To run a fresh installer on VPS (stop old process, remove dir) — SSH first:
 #   kill $(cat /root/rumbleserver/.installer.pid) 2>/dev/null || true
@@ -24,7 +23,7 @@ TMPLOG="$(mktemp)"
 trap 'rm -f "$TMPLOG"' EXIT
 
 echo "🚀 Starting installer on ${VPS} (branch ${BRANCH})..."
-ssh -t "$VPS" "curl -fsSL '${INSTALLER_RAW}' | sudo env RUMBLE_DEPLOY_BRANCH='${BRANCH}' RUMBLE_VERSION='${RUMBLE_VERSION:-}' bash" | tee "$TMPLOG"
+ssh -t "$VPS" "curl -fsSL '${INSTALLER_RAW}' | sudo env RUMBLE_DEPLOY_BRANCH='${BRANCH}' bash" | tee "$TMPLOG"
 
 URL="$(grep '^INSTALLER_URL=' "$TMPLOG" | tail -1 | cut -d= -f2-)"
 if [ -z "$URL" ]; then

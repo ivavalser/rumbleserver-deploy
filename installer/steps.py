@@ -50,7 +50,6 @@ class InstallerContext:
         self.nginx_template = install_dir / "installer" / "nginx.conf.template"
         self._state = self._load_state()
         self._rehydrate_from_env()
-        self._seed_image_tag()
 
     def _rehydrate_from_env(self) -> None:
         """Restore wizard state from .env when state file was lost (installer restart without rm)."""
@@ -77,6 +76,7 @@ class InstallerContext:
             "REDIS_HOST": "redis_host",
             "REDIS_PORT": "redis_port",
             "SECRET_KEY": "secret_key",
+            "WEB_PORT": "web_port",
         }
         updates: dict[str, Any] = {}
         for keys, ctx_key in s3_key_pairs:
@@ -86,7 +86,10 @@ class InstallerContext:
         for env_key, ctx_key in env_keys.items():
             val = _env_value(text, env_key)
             if val and not self.get(ctx_key):
-                updates[ctx_key] = val
+                if ctx_key == "web_port" and val.isdigit():
+                    updates[ctx_key] = int(val)
+                else:
+                    updates[ctx_key] = val
         endpoint = updates.get("aws_s3_endpoint_url") or self.get("aws_s3_endpoint_url") or _env_value_any(
             text, ("S3_ENDPOINT_URL", "AWS_S3_ENDPOINT_URL")
         )
@@ -102,22 +105,6 @@ class InstallerContext:
         if updates:
             self._state.update(updates)
             self.save_state()
-
-    def _seed_image_tag(self) -> None:
-        """Pin image tag from RUMBLE_VERSION, then state, then .env VERSION."""
-        env_ver = _normalize_image_tag(os.environ.get("RUMBLE_VERSION") or "")
-        if env_ver:
-            if self.get("version") != env_ver:
-                self.set("version", env_ver)
-            return
-        if self.get("version"):
-            return
-        if self.env_path.exists():
-            from_env = _normalize_image_tag(
-                _env_value(self.env_path.read_text(encoding="utf-8"), "VERSION")
-            )
-            if from_env:
-                self.set("version", from_env)
 
     def _load_state(self) -> dict[str, Any]:
         if self.state_file.exists():
@@ -215,39 +202,6 @@ class InstallerContext:
         for profile in self.compose_profiles():
             cmd.extend(["--profile", profile])
         return cmd
-
-
-DEFAULT_IMAGE_TAG = "stable"
-
-
-def _normalize_image_tag(raw: str) -> str:
-    tag = (raw or "").strip()
-    if re.fullmatch(r"v\d+\.\d+\.\d+.*", tag):
-        return tag[1:]
-    return tag
-
-
-def _image_tag(ctx: InstallerContext, payload: dict[str, Any] | None = None) -> str:
-    raw = ""
-    if payload:
-        raw = str(payload.get("version") or "").strip()
-    if not raw:
-        raw = str(ctx.get("version") or "").strip()
-    return _normalize_image_tag(raw) or DEFAULT_IMAGE_TAG
-
-
-def _persist_image_tag(ctx: InstallerContext, tag: str) -> None:
-    tag = _normalize_image_tag(tag) or DEFAULT_IMAGE_TAG
-    ctx.set("version", tag)
-    if not ctx.env_path.exists():
-        return
-    if tag != DEFAULT_IMAGE_TAG:
-        _upsert_env_file(ctx.env_path, {"VERSION": tag})
-        return
-    text = ctx.env_path.read_text(encoding="utf-8")
-    lines = [ln for ln in text.splitlines() if not ln.startswith("VERSION=")]
-    if len(lines) != len(text.splitlines()):
-        ctx.env_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
 
 def _ok(msg: str = "", **data: Any) -> StepResult:
@@ -592,7 +546,7 @@ def check_preflight(ctx: InstallerContext, payload: dict[str, Any]) -> StepResul
         }
     )
 
-    ghcr_result = check_ghcr_key_remote(user, key, tag=_image_tag(ctx, payload))
+    ghcr_result = check_ghcr_key_remote(user, key)
     checks.append(
         {
             "id": "ghcr",
@@ -685,7 +639,8 @@ def _infer_s3_vendor(endpoint: str) -> str:
 
 
 def _ghcr_image_ref(ctx: InstallerContext) -> str:
-    return f"{GHCR_IMAGE}:{_image_tag(ctx)}"
+    tag = (ctx.get("version") or "stable").strip() or "stable"
+    return f"{GHCR_IMAGE}:{tag}"
 
 
 def verify_s3_in_docker(
@@ -799,6 +754,191 @@ def _health_check_host(ctx: InstallerContext) -> str:
     if ctx.env_path.exists():
         allowed = allowed or _env_value(ctx.env_path.read_text(encoding="utf-8"), "ALLOWED_HOSTS")
     return _domain_from_allowed_hosts(allowed) or "localhost"
+
+
+DEFAULT_WEB_HOST_PORT = 8000
+WEB_HOST_PORT_CANDIDATES = tuple(range(8000, 8011))
+_SS_PID_RE = re.compile(r"pid=(\d+)")
+
+
+@dataclass
+class PortOccupant:
+    port: int
+    source: str
+    label: str
+    is_rumble: bool = False
+
+
+def _proc_cmdline(pid: int) -> str:
+    try:
+        raw = Path(f"/proc/{pid}/cmdline").read_bytes()
+        return raw.replace(b"\0", b" ").decode("utf-8", errors="replace").strip()
+    except OSError:
+        return ""
+
+
+def _is_rumble_container(name: str, image: str) -> bool:
+    name_l = (name or "").lower()
+    image_l = (image or "").lower()
+    if name_l in ("rumbleserver_web", "rumbleserver_coturn"):
+        return True
+    if name_l.startswith("rumbleserver_") and "ivavalser/rumbleserver" in image_l:
+        return True
+    return False
+
+
+def _docker_port_occupants(ctx: InstallerContext, port: int) -> list[PortOccupant]:
+    proc = ctx.run(
+        [
+            "docker",
+            "ps",
+            "--filter",
+            f"publish={port}",
+            "--format",
+            "{{.Names}}\t{{.Image}}",
+        ],
+        check=False,
+    )
+    found: list[PortOccupant] = []
+    for line in (proc.stdout or "").splitlines():
+        name, _, image = line.partition("\t")
+        name, image = name.strip(), image.strip()
+        if not name:
+            continue
+        found.append(
+            PortOccupant(
+                port=port,
+                source="docker",
+                label=f"container {name} ({image})",
+                is_rumble=_is_rumble_container(name, image),
+            )
+        )
+    return found
+
+
+def _host_port_occupants(ctx: InstallerContext, port: int) -> list[PortOccupant]:
+    proc = ctx.run(["ss", "-ltnp", f"sport = :{port}"], check=False)
+    text = (proc.stdout or "").strip()
+    if not text or "LISTEN" not in text:
+        return []
+    pids: set[int] = set()
+    for match in _SS_PID_RE.finditer(text):
+        try:
+            pids.add(int(match.group(1)))
+        except ValueError:
+            continue
+    found: list[PortOccupant] = []
+    for pid in sorted(pids):
+        cmd = _proc_cmdline(pid)
+        label = f"pid {pid}"
+        if cmd:
+            label = f"pid {pid} ({cmd[:160]})"
+        is_rumble = "rumbleserver" in cmd.lower() and (
+            "daphne" in cmd.lower() or "docker" in cmd.lower()
+        )
+        found.append(
+            PortOccupant(
+                port=port,
+                source="host",
+                label=label,
+                is_rumble=is_rumble,
+            )
+        )
+    return found
+
+
+def probe_port_occupants(ctx: InstallerContext, port: int) -> list[PortOccupant]:
+    """Listeners on a TCP port (docker publish + ss)."""
+    by_key: dict[str, PortOccupant] = {}
+    for occ in _docker_port_occupants(ctx, port) + _host_port_occupants(ctx, port):
+        by_key[occ.label] = occ
+    return list(by_key.values())
+
+
+def _foreign_port_occupants(ctx: InstallerContext, port: int) -> list[PortOccupant]:
+    occupants = probe_port_occupants(ctx, port)
+    if any(o.is_rumble for o in occupants):
+        return []
+    return occupants
+
+
+def _web_host_port(ctx: InstallerContext) -> int:
+    raw = ctx.get("web_port")
+    if raw is not None and str(raw).strip().isdigit():
+        return int(raw)
+    if ctx.env_path.exists():
+        from_env = _env_value(ctx.env_path.read_text(encoding="utf-8"), "WEB_PORT")
+        if from_env.isdigit():
+            return int(from_env)
+    return DEFAULT_WEB_HOST_PORT
+
+
+def _persist_web_host_port(ctx: InstallerContext, port: int) -> None:
+    ctx.set("web_port", port)
+    if ctx.env_path.exists():
+        if port == DEFAULT_WEB_HOST_PORT:
+            text = ctx.env_path.read_text(encoding="utf-8")
+            lines = [ln for ln in text.splitlines() if not ln.startswith("WEB_PORT=")]
+            if len(lines) != len(text.splitlines()):
+                ctx.env_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+        else:
+            _upsert_env_file(ctx.env_path, {"WEB_PORT": str(port)})
+
+
+def _choose_web_host_port(ctx: InstallerContext) -> tuple[int | None, str]:
+    """Pick 8000–8010; skip ports held by non-RMBL listeners."""
+    for port in WEB_HOST_PORT_CANDIDATES:
+        foreign = _foreign_port_occupants(ctx, port)
+        if not foreign:
+            note = ""
+            if port != DEFAULT_WEB_HOST_PORT:
+                busy_8000 = _foreign_port_occupants(ctx, DEFAULT_WEB_HOST_PORT)
+                if busy_8000:
+                    note = (
+                        f"127.0.0.1:{DEFAULT_WEB_HOST_PORT} is used by {busy_8000[0].label}. "
+                        f"Web will listen on 127.0.0.1:{port}."
+                    )
+            return port, note
+    blocked: list[str] = []
+    for port in WEB_HOST_PORT_CANDIDATES:
+        foreign = _foreign_port_occupants(ctx, port)
+        if foreign:
+            blocked.append(f"{port}: {foreign[0].label}")
+    return None, "\n".join(blocked[:12])
+
+
+def _require_ports_available(
+    ctx: InstallerContext,
+    ports: list[int],
+    *,
+    allowed: Callable[[PortOccupant], bool],
+    step_label: str,
+) -> StepResult | None:
+    conflicts: list[str] = []
+    for port in ports:
+        for occ in probe_port_occupants(ctx, port):
+            if allowed(occ):
+                continue
+            conflicts.append(f"Port {port}: {occ.label}")
+    if not conflicts:
+        return None
+    return _fail(
+        f"{step_label} — port(s) already in use:\n" + "\n".join(conflicts),
+        manual="Free the port or stop the conflicting service, then retry this step.",
+        cwd=str(ctx.install_dir),
+    )
+
+
+def _nginx_port_allowed(occ: PortOccupant) -> bool:
+    text = occ.label.lower()
+    return "nginx" in text
+
+
+def _turn_port_allowed(occ: PortOccupant) -> bool:
+    if occ.is_rumble and "rumbleserver_coturn" in occ.label.lower():
+        return True
+    text = occ.label.lower()
+    return any(token in text for token in ("coturn", "turnserver", "rumbleserver_coturn"))
 
 
 _TURN_PRESERVE_ENV_KEYS = (
@@ -1186,15 +1326,9 @@ def _write_env_file(ctx: InstallerContext, payload: dict[str, Any]) -> None:
                 turn_lines.append(f"{key}={val}")
         if turn_lines:
             lines.extend(["# TURN (preserved from previous .env)", *turn_lines, ""])
-        pinned = _image_tag(ctx) if ctx.get("version") else _normalize_image_tag(
-            _env_value(old_text, "VERSION")
-        )
-        if pinned and pinned != DEFAULT_IMAGE_TAG:
-            lines.extend([f"VERSION={pinned}", ""])
-    elif ctx.get("version"):
-        pinned = _image_tag(ctx)
-        if pinned != DEFAULT_IMAGE_TAG:
-            lines.extend([f"VERSION={pinned}", ""])
+        web_port = _env_value(old_text, "WEB_PORT")
+        if web_port.isdigit() and int(web_port) != DEFAULT_WEB_HOST_PORT:
+            lines.extend([f"WEB_PORT={web_port}", ""])
     ctx.env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     ctx.log(f"Wrote {ctx.env_path}")
 
@@ -1455,6 +1589,7 @@ def check_deploy(ctx: InstallerContext) -> StepResult:
     if check.returncode != 0:
         return _fail("manage.py check failed.", manual=check.stderr or check.stdout)
     host = _health_check_host(ctx)
+    web_port = _web_host_port(ctx)
     curl = ctx.run(
         [
             "curl",
@@ -1465,7 +1600,7 @@ def check_deploy(ctx: InstallerContext) -> StepResult:
             "%{http_code}",
             "-H",
             f"Host: {host}",
-            "http://127.0.0.1:8000/admin/",
+            f"http://127.0.0.1:{web_port}/admin/",
         ],
         check=False,
     )
@@ -1474,18 +1609,38 @@ def check_deploy(ctx: InstallerContext) -> StepResult:
         hint = ""
         if code == "400":
             hint = f" (HTTP 400 usually means ALLOWED_HOSTS mismatch; checked with Host: {host})"
-        return _fail(f"Web is not responding on :8000 (code {code or 'n/a'}){hint}.")
-    return _ok("Services are running, web is responding.")
+        return _fail(f"Web is not responding on :{web_port} (code {code or 'n/a'}){hint}.")
+    msg = "Services are running, web is responding."
+    if web_port != DEFAULT_WEB_HOST_PORT:
+        msg += f" (127.0.0.1:{web_port})"
+    return _ok(msg)
 
 
 def apply_deploy(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
-    version = _image_tag(ctx, payload)
-    _persist_image_tag(ctx, version)
+    version = payload.get("version") or ctx.get("version") or "stable"
+    ctx.set("version", version)
+
+    ctx.log("Checking host ports for web (127.0.0.1:8000–8010)...")
+    for port in WEB_HOST_PORT_CANDIDATES:
+        for occ in probe_port_occupants(ctx, port):
+            kind = "RMBL leftover" if occ.is_rumble else "in use"
+            ctx.log(f"  {port}: {occ.label} ({kind})")
+
+    web_port, port_note = _choose_web_host_port(ctx)
+    if web_port is None:
+        return _fail(
+            "No free port for web in range 127.0.0.1:8000–8010.",
+            manual=port_note or "Free one of these ports and retry.",
+            cwd=str(ctx.install_dir),
+        )
+    _persist_web_host_port(ctx, web_port)
+    if port_note:
+        ctx.log(port_note)
+
     env = os.environ.copy()
     env["VERSION"] = version
+    env["WEB_PORT"] = str(web_port)
     ctx.log("Pulling container images (this may take several minutes)...")
-    if version != DEFAULT_IMAGE_TAG:
-        ctx.log(f"Image tag: {version}")
     ctx.run(ctx.compose_base() + ["pull"], env=env)
     ctx.log("Starting services...")
     ctx.run(ctx.compose_base() + ["up", "-d"], env=env)
@@ -1495,6 +1650,8 @@ def apply_deploy(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
     for attempt in range(1, 46):
         result = check_deploy(ctx)
         if result.ok:
+            if port_note:
+                return StepResult(ok=True, message=f"{result.message} {port_note}")
             return result
         ctx.log(f"Health check attempt {attempt}/45 — {result.message}")
         time.sleep(2)
@@ -1935,6 +2092,15 @@ def apply_nginx(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
     if not domain:
         return _fail("Domain not set.")
 
+    port_block = _require_ports_available(
+        ctx,
+        [80, 443],
+        allowed=_nginx_port_allowed,
+        step_label="Nginx / HTTPS",
+    )
+    if port_block:
+        return port_block
+
     dns = check_dns(ctx)
     if not dns.ok:
         return dns
@@ -1949,7 +2115,10 @@ def apply_nginx(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
 
     ctx.log("Writing Nginx site configuration...")
     template = ctx.nginx_template.read_text(encoding="utf-8")
-    conf_content = template.replace("YOUR_DOMAIN", domain)
+    web_port = _web_host_port(ctx)
+    conf_content = template.replace("YOUR_DOMAIN", domain).replace(
+        "__WEB_PORT__", str(web_port)
+    )
     conf_path = Path("/etc/nginx/sites-available/rumbleserver")
     conf_path.write_text(conf_content, encoding="utf-8")
     ctx.run(
@@ -2047,6 +2216,16 @@ def apply_turn(ctx: InstallerContext, _payload: dict[str, Any]) -> StepResult:
     domain = (ctx.get("domain") or "").strip()
     if not domain:
         return _fail("Domain not set — complete the .env step first.")
+
+    port_block = _require_ports_available(
+        ctx,
+        [3478, 5349],
+        allowed=_turn_port_allowed,
+        step_label="WebRTC TURN",
+    )
+    if port_block:
+        return port_block
+
     le_cert = Path(f"/etc/letsencrypt/live/{domain}/fullchain.pem")
     if not le_cert.exists():
         return _fail(
@@ -2242,7 +2421,11 @@ def check_finish(ctx: InstallerContext) -> StepResult:
         data={
             "all_ok": all_ok,
             "domain": domain,
-            "admin_url": f"https://{domain}/admin/" if domain not in ("localhost", "127.0.0.1") else f"http://127.0.0.1:8000/admin/",
+            "admin_url": (
+                f"https://{domain}/admin/"
+                if domain not in ("localhost", "127.0.0.1")
+                else f"http://127.0.0.1:{_web_host_port(ctx)}/admin/"
+            ),
             "admin_username": admin,
             "install_dir": str(ctx.install_dir),
             "env_path": str(ctx.env_path),
