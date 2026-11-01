@@ -104,8 +104,17 @@ At each step the installer **tries to do the work itself first**. If something f
 Custom install directory:
 
 ```bash
-curl -fsSL .../installer.sh | sudo RUMBLE_DIR=/opt/rumble bash
+curl -fsSL .../installer.sh | sudo env RUMBLE_DIR=/opt/rumble bash
 ```
+
+Pin a non-`stable` image tag (optional; not shown in the wizard):
+
+```bash
+curl -fsSL .../installer.sh | sudo env RUMBLE_VERSION=1.2.3 bash
+# or: RUMBLE_VERSION=1.2.3 ./install-remote.sh root@YOUR_SERVER_IP
+```
+
+The tag is stored in `.installer-state.json` and written to `.env` as `VERSION=` so later `./prod.sh` keeps it. `v1.2.3` is accepted and stored as `1.2.3`.
 
 Installer log: `tail -f ~/rumbleserver/installer.log`
 
@@ -125,7 +134,7 @@ The server stores encrypted files (avatars, attachments) in any S3-compatible bu
 
 ```bash
 cd ~/rumbleserver
-./prod.sh                   # stable
+./prod.sh                   # VERSION from .env, else stable
 VERSION=1.0.0 ./prod.sh     # specific version
 ```
 
@@ -250,8 +259,17 @@ curl -fsSL https://raw.githubusercontent.com/ivavalser/rumbleserver-deploy/main/
 Другая директория:
 
 ```bash
-curl -fsSL .../installer.sh | sudo RUMBLE_DIR=/opt/rumble bash
+curl -fsSL .../installer.sh | sudo env RUMBLE_DIR=/opt/rumble bash
 ```
+
+Зафиксировать тег образа не-`stable` (опционально, в визарде не показывается):
+
+```bash
+curl -fsSL .../installer.sh | sudo env RUMBLE_VERSION=1.2.3 bash
+# или: RUMBLE_VERSION=1.2.3 ./install-remote.sh root@IP_СЕРВЕРА
+```
+
+Тег пишется в `.installer-state.json` и в `.env` как `VERSION=`, чтобы последующий `./prod.sh` его сохранил. `v1.2.3` принимается и сохраняется как `1.2.3`.
 
 Лог установщика: `tail -f ~/rumbleserver/installer.log`
 
@@ -271,7 +289,7 @@ curl -fsSL .../installer.sh | sudo RUMBLE_DIR=/opt/rumble bash
 
 ```bash
 cd ~/rumbleserver
-./prod.sh                   # stable
+./prod.sh                   # VERSION из .env, иначе stable
 VERSION=1.0.0 ./prod.sh     # конкретная версия
 ```
 

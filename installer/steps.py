@@ -50,6 +50,7 @@ class InstallerContext:
         self.nginx_template = install_dir / "installer" / "nginx.conf.template"
         self._state = self._load_state()
         self._rehydrate_from_env()
+        self._seed_image_tag()
 
     def _rehydrate_from_env(self) -> None:
         """Restore wizard state from .env when state file was lost (installer restart without rm)."""
@@ -98,11 +99,25 @@ class InstallerContext:
             domain = _domain_from_allowed_hosts(allowed)
             if domain:
                 updates["domain"] = domain
-        if _env_value(text, "COTURN_AUTH_SECRET") and not self.get("turn_enabled"):
-            updates["turn_enabled"] = True
         if updates:
             self._state.update(updates)
             self.save_state()
+
+    def _seed_image_tag(self) -> None:
+        """Pin image tag from RUMBLE_VERSION, then state, then .env VERSION."""
+        env_ver = _normalize_image_tag(os.environ.get("RUMBLE_VERSION") or "")
+        if env_ver:
+            if self.get("version") != env_ver:
+                self.set("version", env_ver)
+            return
+        if self.get("version"):
+            return
+        if self.env_path.exists():
+            from_env = _normalize_image_tag(
+                _env_value(self.env_path.read_text(encoding="utf-8"), "VERSION")
+            )
+            if from_env:
+                self.set("version", from_env)
 
     def _load_state(self) -> dict[str, Any]:
         if self.state_file.exists():
@@ -200,6 +215,39 @@ class InstallerContext:
         for profile in self.compose_profiles():
             cmd.extend(["--profile", profile])
         return cmd
+
+
+DEFAULT_IMAGE_TAG = "stable"
+
+
+def _normalize_image_tag(raw: str) -> str:
+    tag = (raw or "").strip()
+    if re.fullmatch(r"v\d+\.\d+\.\d+.*", tag):
+        return tag[1:]
+    return tag
+
+
+def _image_tag(ctx: InstallerContext, payload: dict[str, Any] | None = None) -> str:
+    raw = ""
+    if payload:
+        raw = str(payload.get("version") or "").strip()
+    if not raw:
+        raw = str(ctx.get("version") or "").strip()
+    return _normalize_image_tag(raw) or DEFAULT_IMAGE_TAG
+
+
+def _persist_image_tag(ctx: InstallerContext, tag: str) -> None:
+    tag = _normalize_image_tag(tag) or DEFAULT_IMAGE_TAG
+    ctx.set("version", tag)
+    if not ctx.env_path.exists():
+        return
+    if tag != DEFAULT_IMAGE_TAG:
+        _upsert_env_file(ctx.env_path, {"VERSION": tag})
+        return
+    text = ctx.env_path.read_text(encoding="utf-8")
+    lines = [ln for ln in text.splitlines() if not ln.startswith("VERSION=")]
+    if len(lines) != len(text.splitlines()):
+        ctx.env_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
 
 def _ok(msg: str = "", **data: Any) -> StepResult:
@@ -544,7 +592,7 @@ def check_preflight(ctx: InstallerContext, payload: dict[str, Any]) -> StepResul
         }
     )
 
-    ghcr_result = check_ghcr_key_remote(user, key)
+    ghcr_result = check_ghcr_key_remote(user, key, tag=_image_tag(ctx, payload))
     checks.append(
         {
             "id": "ghcr",
@@ -637,8 +685,7 @@ def _infer_s3_vendor(endpoint: str) -> str:
 
 
 def _ghcr_image_ref(ctx: InstallerContext) -> str:
-    tag = (ctx.get("version") or "stable").strip() or "stable"
-    return f"{GHCR_IMAGE}:{tag}"
+    return f"{GHCR_IMAGE}:{_image_tag(ctx)}"
 
 
 def verify_s3_in_docker(
@@ -789,12 +836,20 @@ def _upsert_env_file(path: Path, updates: dict[str, str]) -> None:
     path.write_text("\n".join(new_lines).rstrip() + "\n", encoding="utf-8")
 
 
+def _turn_relay_port_range(ctx: InstallerContext) -> tuple[str, str]:
+    text = ctx.env_path.read_text(encoding="utf-8") if ctx.env_path.exists() else ""
+    min_p = _env_value(text, "TURN_MIN_PORT") or "49160"
+    max_p = _env_value(text, "TURN_MAX_PORT") or "49200"
+    return min_p, max_p
+
+
 def _ufw_has_turn_rules(ctx: InstallerContext) -> bool:
     if not shutil.which("ufw"):
         return True
     status = ctx.run(["ufw", "status"], check=False)
     text = (status.stdout or "") + (status.stderr or "")
-    return "3478" in text and "5349" in text and "49160" in text
+    min_p, max_p = _turn_relay_port_range(ctx)
+    return "3478" in text and "5349" in text and min_p in text
 
 
 def _env_value(text: str, key: str) -> str:
@@ -1131,6 +1186,15 @@ def _write_env_file(ctx: InstallerContext, payload: dict[str, Any]) -> None:
                 turn_lines.append(f"{key}={val}")
         if turn_lines:
             lines.extend(["# TURN (preserved from previous .env)", *turn_lines, ""])
+        pinned = _image_tag(ctx) if ctx.get("version") else _normalize_image_tag(
+            _env_value(old_text, "VERSION")
+        )
+        if pinned and pinned != DEFAULT_IMAGE_TAG:
+            lines.extend([f"VERSION={pinned}", ""])
+    elif ctx.get("version"):
+        pinned = _image_tag(ctx)
+        if pinned != DEFAULT_IMAGE_TAG:
+            lines.extend([f"VERSION={pinned}", ""])
     ctx.env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     ctx.log(f"Wrote {ctx.env_path}")
 
@@ -1415,11 +1479,13 @@ def check_deploy(ctx: InstallerContext) -> StepResult:
 
 
 def apply_deploy(ctx: InstallerContext, payload: dict[str, Any]) -> StepResult:
-    version = payload.get("version") or ctx.get("version") or "stable"
-    ctx.set("version", version)
+    version = _image_tag(ctx, payload)
+    _persist_image_tag(ctx, version)
     env = os.environ.copy()
     env["VERSION"] = version
     ctx.log("Pulling container images (this may take several minutes)...")
+    if version != DEFAULT_IMAGE_TAG:
+        ctx.log(f"Image tag: {version}")
     ctx.run(ctx.compose_base() + ["pull"], env=env)
     ctx.log("Starting services...")
     ctx.run(ctx.compose_base() + ["up", "-d"], env=env)
@@ -1935,9 +2001,13 @@ def check_turn(ctx: InstallerContext) -> StepResult:
             manual=f"Run: RENEWED_DOMAINS={domain} /etc/letsencrypt/renewal-hooks/deploy/rumble-coturn.sh",
         )
     if not _ufw_has_turn_rules(ctx):
+        min_p, max_p = _turn_relay_port_range(ctx)
         return _fail(
-            "UFW does not list TURN ports (3478, 5349, 49160:49200).",
-            manual="sudo ufw allow 3478/udp && sudo ufw allow 3478/tcp && sudo ufw allow 5349/tcp && sudo ufw allow 49160:49200/udp",
+            f"UFW does not list TURN ports (3478, 5349, {min_p}:{max_p}).",
+            manual=(
+                f"sudo ufw allow 3478/udp && sudo ufw allow 3478/tcp && sudo ufw allow 5349/tcp "
+                f"&& sudo ufw allow {min_p}:{max_p}/udp"
+            ),
         )
     ps = ctx.run(ctx.compose_base() + ["ps", "--format", "json"], check=False)
     running = _parse_compose_ps(ps.stdout or "")

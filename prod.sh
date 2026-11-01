@@ -3,7 +3,7 @@ set -e
 
 # Деплой и обновление Rumble Server из готового образа GHCR.
 # Использование:
-#   ./prod.sh                  # версия stable
+#   ./prod.sh                  # VERSION из .env, иначе stable
 #   VERSION=1.0.0 ./prod.sh    # конкретная версия / откат
 #   RUMBLE_KEY=xxx ./prod.sh   # перелогиниться новым ключом
 
@@ -88,7 +88,11 @@ if [ -x ./setup-turn.sh ] && ! grep -qE '^TURN_AUTO_SETUP=false' .env 2>/dev/nul
     fi
 fi
 if [ "$_run_setup_turn" -eq 1 ]; then
-    ./setup-turn.sh "${_setup_turn_args[@]}" || echo "⚠️  setup-turn.sh failed — fix TURN settings in .env and retry."
+    if grep -qE '^TURN_SKIP=(true|1)' .env 2>/dev/null; then
+        echo "⏭️  TURN setup skipped (TURN_SKIP in .env)"
+    else
+        ./setup-turn.sh "${_setup_turn_args[@]}"
+    fi
 fi
 
 COMPOSE="$DOCKER_COMPOSE --env-file .env -f docker-compose.yml"
@@ -103,15 +107,20 @@ if grep -qE '^COTURN_AUTH_SECRET=.+' .env 2>/dev/null; then
     fi
 fi
 
-echo "⬇️  Подтягиваю образ (VERSION=${VERSION:-stable})..."
-VERSION="${VERSION:-stable}" COMPOSE_PROFILES="$COMPOSE_PROFILES" $COMPOSE pull
+if [ -z "${VERSION:-}" ]; then
+    VERSION="$(grep -E '^VERSION=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]' || true)"
+fi
+VERSION="${VERSION:-stable}"
+
+echo "⬇️  Подтягиваю образ (VERSION=${VERSION})..."
+VERSION="$VERSION" COMPOSE_PROFILES="$COMPOSE_PROFILES" $COMPOSE pull
 
 echo "▶️  Запускаю сервисы..."
-VERSION="${VERSION:-stable}" COMPOSE_PROFILES="$COMPOSE_PROFILES" $COMPOSE up -d
+VERSION="$VERSION" COMPOSE_PROFILES="$COMPOSE_PROFILES" $COMPOSE up -d
 
 echo ""
 echo "📊 Статус:"
-VERSION="${VERSION:-stable}" COMPOSE_PROFILES="$COMPOSE_PROFILES" $COMPOSE ps
+VERSION="$VERSION" COMPOSE_PROFILES="$COMPOSE_PROFILES" $COMPOSE ps
 
 echo ""
 echo "✅ Готово. Логи: COMPOSE_PROFILES=\"$COMPOSE_PROFILES\" $COMPOSE logs -f web"

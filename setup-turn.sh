@@ -25,18 +25,19 @@ warn() {
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -f "$SCRIPT_DIR/coturn/entrypoint.sh" ] && [ -f "$SCRIPT_DIR/docker-compose.yml" ]; then
-  INSTALL_DIR="$SCRIPT_DIR"
+# Git prod: repo-root .env + deploy/coturn (docker-compose.prod.yml). Operator bundle: .env next to docker-compose.yml.
+if [ -f "$SCRIPT_DIR/coturn/entrypoint.sh" ] && [ -f "$SCRIPT_DIR/docker-compose.prod.yml" ]; then
+  ENV_FILE="$(cd "$SCRIPT_DIR/.." && pwd)/.env"
+  HOOK_INSTALL_DIR="$SCRIPT_DIR"
   COTURN_DIR="$SCRIPT_DIR/coturn"
-elif [ -f "$SCRIPT_DIR/coturn/entrypoint.sh" ] && [ -f "$SCRIPT_DIR/docker-compose.prod.yml" ]; then
-  INSTALL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+elif [ -f "$SCRIPT_DIR/coturn/entrypoint.sh" ] && [ -f "$SCRIPT_DIR/docker-compose.yml" ]; then
+  ENV_FILE="$SCRIPT_DIR/.env"
+  HOOK_INSTALL_DIR="$SCRIPT_DIR"
   COTURN_DIR="$SCRIPT_DIR/coturn"
 else
   warn "setup-turn: cannot find coturn/ (run from operator bundle or deploy/)"
   exit 1
 fi
-
-ENV_FILE="$INSTALL_DIR/.env"
 if [ ! -f "$ENV_FILE" ]; then
   warn "setup-turn: missing $ENV_FILE"
   exit 1
@@ -94,7 +95,22 @@ private_ip() {
 
 coturn_urls() {
   local d="$1"
-  printf 'stun:%s:3478,turn:%s:3478?transport=udp,turn:%s:3478?transport=tcp,turns:%s:5349?transport=tcp' "$d" "$d" "$d" "$d"
+  local with_tls="${2:-0}"
+  if [ "$with_tls" = "1" ]; then
+    printf 'stun:%s:3478,turn:%s:3478?transport=udp,turn:%s:3478?transport=tcp,turns:%s:5349?transport=tcp' "$d" "$d" "$d" "$d"
+  else
+    printf 'stun:%s:3478,turn:%s:3478?transport=udp,turn:%s:3478?transport=tcp' "$d" "$d" "$d"
+  fi
+}
+
+ufw_cmd() {
+  if [ "$(id -u)" -eq 0 ]; then
+    ufw "$@"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo ufw "$@"
+  else
+    ufw "$@"
+  fi
 }
 
 AUTO="$(env_get TURN_AUTO_SETUP)"
@@ -160,10 +176,14 @@ MIN_PORT="${MIN_PORT:-49160}"
 MAX_PORT="${MAX_PORT:-49200}"
 TTL="${TTL:-300}"
 
+TLS_URLS=0
+if [ -f "$COTURN_DIR/certs/fullchain.pem" ]; then
+  TLS_URLS=1
+fi
+
 log "setup-turn: updating .env for domain $DOMAIN"
-env_upsert FEATURE_TURN_CREDENTIALS true
 env_upsert COTURN_AUTH_SECRET "$SECRET"
-env_upsert COTURN_URLS "$(coturn_urls "$DOMAIN")"
+env_upsert COTURN_URLS "$(coturn_urls "$DOMAIN" "$TLS_URLS")"
 env_upsert COTURN_CREDENTIAL_TTL_SECONDS "$TTL"
 env_upsert TURN_REALM "$DOMAIN"
 env_upsert TURN_EXTERNAL_IP "$PUB"
@@ -180,10 +200,10 @@ fi
 
 if command -v ufw >/dev/null 2>&1; then
   log "setup-turn: opening UFW ports for STUN/TURN"
-  ufw allow 3478/udp >/dev/null 2>&1 || true
-  ufw allow 3478/tcp >/dev/null 2>&1 || true
-  ufw allow 5349/tcp >/dev/null 2>&1 || true
-  ufw allow "${MIN_PORT}:${MAX_PORT}/udp" >/dev/null 2>&1 || true
+  ufw_cmd allow 3478/udp >/dev/null 2>&1 || warn "setup-turn: ufw allow 3478/udp failed (run as root or sudo)"
+  ufw_cmd allow 3478/tcp >/dev/null 2>&1 || warn "setup-turn: ufw allow 3478/tcp failed"
+  ufw_cmd allow 5349/tcp >/dev/null 2>&1 || warn "setup-turn: ufw allow 5349/tcp failed"
+  ufw_cmd allow "${MIN_PORT}:${MAX_PORT}/udp" >/dev/null 2>&1 || warn "setup-turn: ufw allow relay UDP range failed"
 fi
 
 HOOK_TEMPLATE="$COTURN_DIR/certbot-deploy-hook.sh"
@@ -191,10 +211,11 @@ if [ -f "$LE_CERT" ] && [ -f "$HOOK_TEMPLATE" ]; then
   log "setup-turn: installing certbot deploy hook and copying TLS certs"
   HOOK_PATH="/etc/letsencrypt/renewal-hooks/deploy/rumble-coturn.sh"
   mkdir -p "$(dirname "$HOOK_PATH")"
-  sed -e "s|__DOMAIN__|${DOMAIN}|g" -e "s|__INSTALL_DIR__|${INSTALL_DIR}|g" \
+  sed -e "s|__DOMAIN__|${DOMAIN}|g" -e "s|__INSTALL_DIR__|${HOOK_INSTALL_DIR}|g" \
     "$HOOK_TEMPLATE" > "$HOOK_PATH"
   chmod 755 "$HOOK_PATH"
-  RENEWED_DOMAINS="$DOMAIN" /bin/sh "$HOOK_PATH" || true
+  RENEWED_DOMAINS="$DOMAIN" /bin/sh "$HOOK_PATH"
+  env_upsert COTURN_URLS "$(coturn_urls "$DOMAIN" 1)"
 else
   warn "setup-turn: LE cert or hook template missing — coturn will run without turns:5349 until certs exist"
 fi

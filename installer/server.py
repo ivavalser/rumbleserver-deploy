@@ -495,6 +495,9 @@ def main() -> None:
 
     ctx = InstallerContext(INSTALL_DIR, append_log)
     append_log(f"Installer started: {INSTALL_DIR}, port {PORT}")
+    image_tag = ctx.get("version") or "stable"
+    if image_tag != "stable":
+        append_log(f"Image tag: {image_tag}")
 
     class Server(ThreadingHTTPServer):
         pass

@@ -36,7 +36,6 @@ if [ -n "${TURN_EXTERNAL_IP:-}" ]; then
   if [ -n "${TURN_PRIVATE_IP:-}" ]; then
     echo "external-ip=${TURN_EXTERNAL_IP}/${TURN_PRIVATE_IP}" >> "$CONF"
     echo "listening-ip=${TURN_PRIVATE_IP}" >> "$CONF"
-    echo "allowed-peer-ip=${TURN_PRIVATE_IP}" >> "$CONF"
   else
     echo "external-ip=${TURN_EXTERNAL_IP}" >> "$CONF"
   fi
