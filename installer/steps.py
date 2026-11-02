@@ -2240,11 +2240,11 @@ def apply_turn(ctx: InstallerContext, _payload: dict[str, Any]) -> StepResult:
             cwd=str(ctx.install_dir),
         )
     ctx.log("Running setup-turn.sh...")
-    proc = ctx.run(["/bin/sh", str(setup_script), "--from-installer"], check=False)
+    proc = ctx.run(["bash", str(setup_script), "--from-installer"], check=False)
     if proc.returncode != 0:
         return _fail(
             "setup-turn.sh failed.",
-            manual=proc.stderr or proc.stdout or f"Run: sh {setup_script} --from-installer",
+            manual=proc.stderr or proc.stdout or f"Run: bash {setup_script} --from-installer",
             cwd=str(ctx.install_dir),
         )
 
